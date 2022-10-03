@@ -1,5 +1,5 @@
 # Lab-dataprocess
-# dataprocessv2 is main, the other 3 are modules for this program
+# dataprocessv2 starts the data process UI, the other py files are modules to realize data process functions
 # This set of codes runs under python environment and does basic data process for .dat/.txt format raw data. 
 Attention: 
 1. Raw data needs to be well organized and stored in a good matrix format, where the first column is x-variable inputs and following columns are different y variables.
