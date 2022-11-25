@@ -24,9 +24,11 @@ import scipy as sp
 import pandas as pd
 import dataprocessor as dp
 import study as st
-import plottool_v2 as pt
+import plottool_v3 as pt
 import curfittool as cft
-import get_superoscilation_v3  as gso
+import get_superoscilation_v2  as gso
+import SO_tools as sot
+import configparser as cfp
 
 
 class Labtools:        
@@ -35,7 +37,7 @@ class Labtools:
         # self.root.columnconfigure(0,weight=1)
         # self.root.rowconfigure(0,weight=1)
         self.nb = ttk.Notebook(self.root)
-        self.frame_transmission = ttk.Frame(self.nb)
+        # self.frame_transmission = ttk.Frame(self.nb)
         self.frame_plotdata = ttk.Frame(self.nb)
         self.frame_index = ttk.Frame(self.nb)
         self.frame_loaddata = ttk.Frame(self.nb)
@@ -45,7 +47,7 @@ class Labtools:
         self.frame_polarimetry = ttk.Frame(self.nb)
         self.frame_getso = ttk.Frame(self.nb)
         self.nb.add(self.frame_loaddata,text='load data')
-        self.nb.add(self.frame_transmission,text='transmission')
+        # self.nb.add(self.frame_transmission,text='transmission')
         self.nb.add(self.frame_index,text='refractive index')
         self.nb.add(self.frame_polarimetry,text='polarimetry')
         self.nb.add(self.frame_plotdata,text='plot data (td)')
@@ -56,19 +58,46 @@ class Labtools:
         self.nb.grid(sticky='nsew')
         # self.nb.columnconfigure(0,weight=1)
         # self.nb.rowconfigure(0,weight=1)
+        self.config_labtools = cfp.ConfigParser()
         
+        '''reading in configure file and load global variables'''
+        try:
+            open('gui_init.ini')
+        except:
+            self.config_labtools['gui_init_values'] = {}
+            self.expstyle_key = tk.StringVar(value='sam+ref')
+            self.nsam = tk.IntVar(value=1)
+            self.nref = tk.IntVar(value=1)
+            self.folder = ''
+        else:
+            self.expstyle_key = tk.StringVar()
+            self.nsam = tk.IntVar()
+            self.nref = tk.IntVar()
+            self.config_labtools.read('gui_init.ini')
+            keys_init_values = list(self.config_labtools['gui_init_values'])
+            if 'exp_mode' in keys_init_values:
+                self.expstyle_key.set(self.config_labtools['gui_init_values']['exp_mode'])
+            if 'n_sam' in keys_init_values:
+                self.nsam.set(int(self.config_labtools['gui_init_values']['n_sam']))
+            if 'n_ref' in keys_init_values:
+                self.nref.set(int(self.config_labtools['gui_init_values']['n_ref']))
+            
+        self.actiondisp = tk.StringVar(value='ready')
+        # self.expstyle_key = tk.StringVar(value='sam+ref')
+        # self.nsam = tk.IntVar(value=1)
+        # self.nref = tk.IntVar(value=1)
+        # self.actiondisp = tk.StringVar(value='ready')
         '''
             load data frame
         '''
-        self.expstyle_key = tk.StringVar(value='sam+ref')
+        # self.expstyle_key = tk.StringVar(value='sam+ref')
         mainframe = ttk.Labelframe(self.frame_loaddata,text='load data')
         mainframe.pack(expand=True)
         # mainframe.columnconfigure(0,weight=1)
         # mainframe.columnconfigure(1,weight=1)
         typeentry = ttk.Combobox(mainframe,textvariable=self.expstyle_key,width=20)
         typeentry['values'] = ('sam/ref','sam+ref','polarimetry_so')
-        self.nsam = tk.IntVar(value=1)
-        self.nref = tk.IntVar(value=1)
+        
         
         button_selectfolder = ttk.Button(mainframe,text='select folder',command=self.selectfolder)
         button1 = ttk.Button(mainframe,text='load data',command=self.load)
@@ -77,11 +106,17 @@ class Labtools:
         label4 = ttk.Label(mainframe,text='Measurement type: ')
         label1 = ttk.Label(mainframe,text='Sample scan number: ')
         label2 = ttk.Label(mainframe,text='Reference scan number: ')
-        self.entry_nsam = ttk.Entry(mainframe,textvariable=self.nsam,state='disabled',width=10)
-        self.entry_nref = ttk.Entry(mainframe,textvariable=self.nref,state='disabled',width=10)
-        button2 = ttk.Button(mainframe,text='confirm',command=self.state_entry)
-   
+        if self.expstyle_key.get() == 'sam+ref' or self.expstyle_key.get() == 'polarimetry':
+            self.entry_nsam = ttk.Entry(mainframe,textvariable=self.nsam,state='normal', width = 10)
+            self.entry_nref = ttk.Entry(mainframe,textvariable=self.nref,state='normal', width = 10)
+        else:
+                
+            self.entry_nsam = ttk.Entry(mainframe,textvariable=self.nsam,state='disabled', width = 10)
+            self.entry_nref = ttk.Entry(mainframe,textvariable=self.nref,state='disabled', width = 10)
         
+        button2 = ttk.Button(mainframe,text='confirm', command=self.state_entry)
+   
+        typeentry.bind('<<ComboboxSelected>>', self.state_entry)
         
         button_selectfolder.grid(column=0,row=0)
         label4.grid(column=0,row=1)
@@ -98,7 +133,7 @@ class Labtools:
         
         
         '''status frame'''
-        self.actiondisp = tk.StringVar(value='ready')
+        
         window_status = ttk.Labelframe(self.frame_loaddata,text='Status')
         window_status.pack(side=tk.BOTTOM,expand=True, fill=tk.BOTH)
         label_action = ttk.Label(window_status,textvariable=self.actiondisp)
@@ -123,9 +158,19 @@ class Labtools:
         button_superosc.grid(column=0,row=3)
         
     def selectfolder(self):
-        self.folder = tk.filedialog.askdirectory()
+        try:
+            default_folder = self.config_labtools['gui_init_values']['folder_path']
+        except:
+            self.folder = tk.filedialog.askdirectory()
+            self.config_labtools['gui_init_values'] = {'folder_path': self.folder}
+            with open('gui_init.ini', 'w') as gui_init:
+                 self.config_labtools.write(gui_init)
+        else:
+            self.folder = tk.filedialog.askdirectory(initialdir = default_folder)
+        
+      
     
-    def state_entry(self):
+    def state_entry(self, *arg):
         if self.expstyle_key.get() == 'sam+ref' or self.expstyle_key.get() == 'polarimetry' :
             self.entry_nsam.configure(state='normal')
             self.entry_nref.configure(state='normal')
@@ -133,6 +178,7 @@ class Labtools:
             self.entry_nsam.configure(state='disabled')
             self.entry_nref.configure(state='disabled')   
         #self.dispActions(self.frame_loaddata, self.expstyle_key.get()+' selected')
+        
         self.actiondisp.set(self.expstyle_key.get()+' selected')
         
     
@@ -141,6 +187,15 @@ class Labtools:
         self.expstyle = self.expstyle_key.get()
         self.specgo = dp.SpecProcess(self.path,self.expstyle)
         self.x,self.y,self.t = self.specgo.loadspecs()
+        
+        self.config_labtools['gui_init_values']['exp_mode'] = self.expstyle_key.get()
+        self.config_labtools['gui_init_values']['n_sam'] = str(self.nsam.get())
+        self.config_labtools['gui_init_values']['n_ref'] = str(self.nref.get())
+        with open('gui_init.ini', 'w') as gui_init:
+             self.config_labtools.write(gui_init)
+        
+        
+        
         self.actiondisp.set('file loaded')
     
     def basicprocess(self):
@@ -150,6 +205,10 @@ class Labtools:
             # self.xref = self.specgo.Totalfield(xavg_ref, yavg_ref)
             self.xsam = xavg_sam
             self.xref = xavg_ref
+            
+            # self.xsam_filtered = dp.Basic_functions().signal_noise_filter(self.xsam)
+            # self.xref_filtered = dp.Basic_functions().signal_noise_filter(self.xref)
+            
             self.tsam = tavg_sam
             self.tref = tavg_ref
             self.xcomp = comp1
@@ -163,12 +222,14 @@ class Labtools:
             self.scompall = self.specgo.combinedict(self.sxcomp, self.sycomp)
             self.xall = self.specgo.combinedict(self.xsam, self.xref)
             self.tall = self.specgo.combinedict(self.tsam, self.tref)
+
+            
             self.sxall = self.specgo.combinedict(self.sxsam, self.sxref)
             self.sxall_abs = dp.Basic_functions().dict_getabs(self.sxall)
             self.sxall_real = dp.Basic_functions().dict_getreal(self.sxall)
             self.freqall = self.specgo.combinedict(self.freqsam, self.freqref)
-            self.xall_normal = dp.Basic_functions().dict_normalize(self.xall)
-            self.sxall_abs_normal = dp.Basic_functions().dict_normalize(self.sxall_abs)
+            self.xall_normal = dp.Basic_functions().normalize_signal_samref(self.xall)
+            self.sxall_abs_normal = dp.Basic_functions().normalize_signal_samref(self.sxall_abs)
             self.plotgo_a = pt.Plottool(self.frame_plotdata,self.tall,self.xall)
             self.plotgo_b = pt.Plottool(self.frame_plotdata_fd, self.freqall, self.sxall)
             self.plotgo_c = pt.Plottool(self.frame_plotnormal, self.tall,self.xall_normal)
@@ -220,12 +281,13 @@ class Labtools:
     '''
         
     def study_transmission(self):
+        self.window_transmission = tk.Toplevel()
         if self.expstyle == 'sam+ref':
-            self.transgo = st.study_transmission(self.frame_transmission,self.freqsam, self.sxsam, self.sxref)
+            self.transgo = st.study_transmission(self.window_transmission,self.freqsam, self.sxsam, self.sxref)
         if self.expstyle == 'sam/ref':
-            self.transgo = st.study_transmission(self.frame_transmission, self.freqsam, self.sxall, self.sxall)
+            self.transgo = st.study_transmission(self.window_transmission, self.freqsam, self.sxall, self.sxall)
         if self.expstyle == 'polarimetry_so':
-            self.transgo = st.study_transmission(self.frame_transmission, self.freqsamy, self.sysam, self.syref)
+            self.transgo = st.study_transmission(self.window_transmission, self.freqsamy, self.sysam, self.syref)
         
     '''
     begin study index panel
@@ -243,7 +305,10 @@ class Labtools:
         self.actiondisp.set('Proceed to polarimetry study panel')
         
     def SO_spectrum(self):
-        self.build_SO = gso.Display_SO(self.frame_getso)
+        root = tk.Toplevel()
+        # root = self.frame_getso
+        self.build_SO = sot.SO_init(root, self.folder, self.xall, self.tall)
+        # self.build_SO = gso.Display_SO(root)
         
 # datago = Labtools()
 # datago.root.mainloop()
