@@ -13,6 +13,7 @@ import tkinter as tk
 import dataprocessor as dp
 import glob
 import plottool_v3 as pt
+import copy
 
 from scipy import stats
 from scipy.signal import find_peaks, hilbert, windows
@@ -32,6 +33,7 @@ from tkinter import ttk
 
 from multiprocessing import Pool, cpu_count
 from tqdm.notebook import tqdm
+import configparser as cfp
 
 
 
@@ -50,26 +52,59 @@ class SO_init:
         self.selection_wf_1 = tk.StringVar(value = 'not selected')
         self.selection_so_0 = tk.StringVar(value = 'not selected')
         self.selection_so_1 = tk.StringVar(value = 'not selected')
-        self.x = x_avg
-        self.t = t_avg
-        self.timewindow_bot = tk.DoubleVar()
-        self.timewindow_top = tk.DoubleVar()
-        self.bf = dp.Basic_functions()
-        self.phase_05 = tk.DoubleVar(value=-10)
-        self.phase_06 = tk.DoubleVar(value=-133)
-        self.phase_07 = tk.DoubleVar(value=-114)
-        self.phase_08 = tk.DoubleVar(value=-26)
         self.td1 = tk.StringVar()
         self.td2 = tk.StringVar()
         self.td3 = tk.StringVar()
         self.ph1 = tk.StringVar()
         self.ph2 = tk.StringVar()
         self.ph3 = tk.StringVar()
+        self.bf = dp.Basic_functions()
+        self.x = copy.deepcopy(x_avg)
+        self.t = copy.deepcopy(t_avg)
+        self.x_backup = copy.deepcopy(x_avg)
+        self.t_backup = copy.deepcopy(t_avg)
         self.n0 = tk.IntVar(value=0)
         self.idx_so_0 = (0,)
         self.idx_so_1 = (0,)
         self.idx_wf_0 = (0,)
         self.idx_wf_1 = (0,)
+        try:
+            open('so_tools.ini')
+        except:
+            self.timewindow_bot = tk.DoubleVar()
+            self.timewindow_top = tk.DoubleVar()
+            
+            self.phase_05 = tk.DoubleVar(value=-10)
+            self.phase_06 = tk.DoubleVar(value=-133)
+            self.phase_07 = tk.DoubleVar(value=-114)
+            self.phase_08 = tk.DoubleVar(value=-26)
+            
+            
+        else:
+            self.timewindow_bot = tk.DoubleVar()
+            self.timewindow_top = tk.DoubleVar()
+            
+            self.phase_05 = tk.DoubleVar(value=-10)
+            self.phase_06 = tk.DoubleVar(value=-133)
+            self.phase_07 = tk.DoubleVar(value=-114)
+            self.phase_08 = tk.DoubleVar(value=-26)
+        
+            so_config = cfp.ConfigParser().read('so_tools.ini')
+            so_config_keys = list(so_config['so_init'])
+            if 'timewindow_bot' in so_config_keys:
+                self.timewindow_bot.set(float(so_config['so_init']['timewindow_bot']))
+            if 'timewindow_top' in so_config_keys:
+                self.timewindow_top.set(float(so_config['so_init']['timewindow_top']))
+            if 'phase_05' in so_config_keys:
+                self.phase_05.set(float(so_config['so_init']['phase_05']))
+            if 'phase_06' in so_config_keys:
+                self.phase_05.set(float(so_config['so_init']['phase_06']))
+            if 'phase_07' in so_config_keys:
+                self.phase_05.set(float(so_config['so_init']['phase_07']))
+            if 'phase_08' in so_config_keys:
+                self.phase_05.set(float(so_config['so_init']['phase_08']))
+            
+            
         '''main windows'''
         
         self.window_so_calculate = ttk.Labelframe(self.root, text = 'Calculate SO phases')
@@ -125,6 +160,8 @@ class SO_init:
         
         button_plot_so = ttk.Button(self.window_so_calculate, text = 'plot results', command = self.plot_predictions)
         
+        button_save_config = ttk.Button(self.window_so_calculate, text = 'make default inputs', command = self.build_so_config)
+        
         
         self.listbox_filenames.grid(column = 0, row = 0, rowspan = 4, columnspan = 3)
         self.button_select_wf_0.grid(column = 3, row = 0)
@@ -172,6 +209,8 @@ class SO_init:
         label_ph2.grid(column=1,row=12)
         label_ph3.grid(column=1,row=13)
         
+        button_save_config.grid(column = 0, row = 14, sticky = 'w')
+        
         
         '''window content for window_so_discriminate'''
         label_tw_bot = ttk.Label(self.window_so_discriminate, text = 'Enter lower limit of timewindow: ')
@@ -195,10 +234,21 @@ class SO_init:
         self.canvas0.draw()
         
         '''window content for window_so_status'''
-        self.label_status = ttk.Label(self.window_so_status, textvariable = self.status)
+        self.label_status = ttk.Label(self.window_so_status, textvariable = self.status, font=('Times', 15))
         self.label_status.grid(column = 0, row = 0, columnspan = 3)
     
     '''functions for button activities''' 
+    
+    
+    def build_so_config(self):
+        so_config = cfp.ConfigParser()
+        so_config['so_init'] = {'timewindow_bot': str(self.timewindow_bot.get()),
+                                'timewindow_top': str(self.timewindow_top.get()),
+                                'phase_05': str(self.phase_05.get()), 
+                                'phase_06': str(self.phase_06.get()),
+                                'phase_07': str(self.phase_07.get()),
+                                'phase_08': str(self.phase_08.get())
+                                }
         
     def select_wf_0(self):
         self.filenames_wf_0 = []
