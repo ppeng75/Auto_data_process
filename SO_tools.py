@@ -12,7 +12,7 @@ import matplotlib.pyplot as plt
 import tkinter as tk
 import dataprocessor as dp
 import glob
-import plottool_v3 as pt
+import plottool_v5 as pt
 import copy
 
 from scipy import stats
@@ -21,6 +21,7 @@ from scipy.integrate import simps
 from scipy.interpolate import UnivariateSpline, InterpolatedUnivariateSpline
 from scipy.ndimage import gaussian_filter1d
 from scipy.optimize import minimize
+
 
 from collections import Counter
 from itertools import product
@@ -31,7 +32,7 @@ from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 import tkinter as tk
 from tkinter import ttk
 
-from multiprocessing import Pool, cpu_count
+from multiprocessing import Pool, cpu_count, Process
 from tqdm.notebook import tqdm
 import configparser as cfp
 
@@ -41,33 +42,87 @@ import configparser as cfp
 from datetime import datetime
 
 class SO_init:
-    def __init__(self, root_window, path, x_avg, t_avg):
+    '''generate a GUI for superoscillation related applications'''
+    
+    def __init__(self, root_window, datapath, x_avg, t_avg):
+        '''
+        
+
+        Parameters
+        ----------
+        root_window : Tk Type
+            DESCRIPTION. main window for this application
+        x_avg : Dict TYPE
+            DESCRIPTION. Dictionary that contains averaged x values to be used in calculation
+        t_avg : Dict TYPE
+            DESCRIPTION. Dictionary that contains averaged time values to be used in calculation
+
+        Returns
+        -------
+        None.
+
+        '''
+        
+        
         '''global varibales'''
         self.root = root_window
-        self.path = path + '/'
-        self.filenames = list(t_avg)
-        self.status = tk.StringVar(value = 'ready')
-        self.listbox_filenames_content = tk.StringVar(value = self.filenames)
+        # store the values of x and t in deepcopy form so any modification to x and t dicts won't influence original dicts
+        self.x = copy.deepcopy(x_avg)
+        self.t = copy.deepcopy(t_avg)
+        # also get a backup copy in case we want to restore to original values after certain manipulations
+        self.x_backup = copy.deepcopy(x_avg)
+        self.t_backup = copy.deepcopy(t_avg)
+        
+        
+        
+        self.path = datapath + '/'
+        self.filenames = list(t_avg) # get the dict keys of x and t 
+        self.status = tk.StringVar(value = 'ready') #s tatus bar textvaribale for displaying status of the application
+        self.listbox_filenames_content = tk.StringVar(value = self.filenames) 
+        self.J = {}
+        self.J_conv = {}
+        self.J_base = {}
+        self.J_log = {}
+        self.tw_len = {}
+        self.f_J = {}
+        self.n_dis = 0
+        self.D_J = tk.StringVar(value = 'none')
+        
+        # textvaribales for displaying names of selected data sets
         self.selection_wf_0 = tk.StringVar(value = 'not selected')
         self.selection_wf_1 = tk.StringVar(value = 'not selected')
         self.selection_so_0 = tk.StringVar(value = 'not selected')
         self.selection_so_1 = tk.StringVar(value = 'not selected')
+        
+        # text variables for storing and dispaly time delays
         self.td1 = tk.StringVar()
         self.td2 = tk.StringVar()
         self.td3 = tk.StringVar()
+        
+        # textvariables for storing and display newly calculated phases
         self.ph1 = tk.StringVar()
         self.ph2 = tk.StringVar()
         self.ph3 = tk.StringVar()
+        
+        # shortcut handle to use Basic_functions module
         self.bf = dp.Basic_functions()
-        self.x = copy.deepcopy(x_avg)
-        self.t = copy.deepcopy(t_avg)
-        self.x_backup = copy.deepcopy(x_avg)
-        self.t_backup = copy.deepcopy(t_avg)
+        
+        # textvariable to store and display the starting index of superoscillation results to display
         self.n0 = tk.IntVar(value=0)
-        self.idx_so_0 = (0,)
-        self.idx_so_1 = (0,)
-        self.idx_wf_0 = (0,)
-        self.idx_wf_1 = (0,)
+        
+        # variables to store index of selected data sets
+        # self.idx_so_0 = (0,)
+        # self.idx_so_1 = (0,)
+        # self.idx_wf_0 = (0,)
+        # self.idx_wf_1 = (0,)
+        self.idx_so_0 = ()
+        self.idx_so_1 = ()
+        self.idx_wf_0 = ()
+        self.idx_wf_1 = ()
+        
+        
+        # try to load pre-configurated values to textvariables that are often changed, this is to save time of entering these values 
+        # when the window restarts
         try:
             open('so_tools.ini')
         except:
@@ -84,13 +139,14 @@ class SO_init:
             self.timewindow_bot = tk.DoubleVar()
             self.timewindow_top = tk.DoubleVar()
             
-            self.phase_05 = tk.DoubleVar(value=-10)
-            self.phase_06 = tk.DoubleVar(value=-133)
-            self.phase_07 = tk.DoubleVar(value=-114)
-            self.phase_08 = tk.DoubleVar(value=-26)
+            self.phase_05 = tk.DoubleVar()
+            self.phase_06 = tk.DoubleVar()
+            self.phase_07 = tk.DoubleVar()
+            self.phase_08 = tk.DoubleVar()
         
             so_config = cfp.ConfigParser().read('so_tools.ini')
             so_config_keys = list(so_config['so_init'])
+            
             if 'timewindow_bot' in so_config_keys:
                 self.timewindow_bot.set(float(so_config['so_init']['timewindow_bot']))
             if 'timewindow_top' in so_config_keys:
@@ -113,11 +169,12 @@ class SO_init:
         self.window_so_status = ttk.Labelframe(self.root, text = 'status: ')
         self.window_so_calculate.grid(column = 0, row = 0)
         self.window_so_discriminate.grid(column = 0, row = 1)
-        self.window_so_plot.grid(column = 1, row = 0, rowspan = 2)
+        self.window_so_plot.grid(column = 1, row = 0, columnspan=2, rowspan = 2)
         self.window_so_status.grid(column = 0, row = 3, sticky = 'w')
         
         '''window content for window_so_calcualtet'''
-        self.listbox_filenames = tk.Listbox(self.window_so_calculate, listvariable = self.listbox_filenames_content, selectmode = 'extended')
+        self.listbox_filenames = tk.Listbox(self.window_so_calculate, listvariable = self.listbox_filenames_content, 
+                                            selectmode = 'extended', width = 40)
         label_wf_0 = ttk.Label(self.window_so_calculate, text = 'waveforms_0: \n')
         label_wf_0_content = ttk.Label(self.window_so_calculate, textvariable = self.selection_wf_0)
         label_wf_1 = ttk.Label(self.window_so_calculate, text = 'waveforms_1: \n')
@@ -160,14 +217,19 @@ class SO_init:
         
         button_plot_so = ttk.Button(self.window_so_calculate, text = 'plot results', command = self.plot_predictions)
         
+        button_sim_so = ttk.Button(self.window_so_calculate, text = 'simulate SO', command = self.simulate_so)
+        button_shift_wfs = ttk.Button(self.window_so_calculate, text = 'shift waveforms', command = self.shift_wfs)
+        
         button_save_config = ttk.Button(self.window_so_calculate, text = 'make default inputs', command = self.build_so_config)
+        button_plotall = ttk.Button(self.window_so_calculate, text = 'plot all', command = self.plot_all)
+        button_c_so = ttk.Button(self.window_so_calculate, text = 'auto SO', command = self.find_closest_so)
         
         
-        self.listbox_filenames.grid(column = 0, row = 0, rowspan = 4, columnspan = 3)
-        self.button_select_wf_0.grid(column = 3, row = 0)
-        self.button_select_wf_1.grid(column = 3, row = 1)
-        self.button_select_so_0.grid(column = 3, row = 2)
-        self.button_select_so_1.grid(column = 3, row = 3)
+        self.listbox_filenames.grid(column = 0, row = 0, rowspan = 4, columnspan = 4)
+        self.button_select_wf_0.grid(column = 5, row = 0)
+        self.button_select_wf_1.grid(column = 5, row = 1)
+        self.button_select_so_0.grid(column = 5, row = 2)
+        self.button_select_so_1.grid(column = 5, row = 3)
         
         
         
@@ -209,33 +271,60 @@ class SO_init:
         label_ph2.grid(column=1,row=12)
         label_ph3.grid(column=1,row=13)
         
-        button_save_config.grid(column = 0, row = 14, sticky = 'w')
+        button_shift_wfs.grid(column = 0, row = 14, sticky = 'w')
+        button_sim_so.grid(column = 1, row = 14, sticky = 'w')
+        button_save_config.grid(column = 0, row = 15, sticky = 'w')
+        button_plotall.grid(column = 1, row = 15, sticky = 'w')
+        button_c_so.grid(column = 2, row = 15, sticky = 'w')
         
         
         '''window content for window_so_discriminate'''
+        
         label_tw_bot = ttk.Label(self.window_so_discriminate, text = 'Enter lower limit of timewindow: ')
         label_tw_top = ttk.Label(self.window_so_discriminate, text = 'Enter upper limit of timewindow: ')
         entry_timewindow_bot = ttk.Entry(self.window_so_discriminate, textvariable = self.timewindow_bot)
         entry_timewindow_top = ttk.Entry(self.window_so_discriminate, textvariable = self.timewindow_top)
-        button_cal_discrim = ttk.Button(self.window_so_discriminate, text = 'calculate discriminability', command = self.discrimin_normal)        
+        button_cal_discrim = ttk.Button(self.window_so_discriminate, text = 'calculate ND', command = self.discrimin_normal)        
+        button_D_discrim = ttk.Button(self.window_so_discriminate, text = 'calculate D ND', command = self.D_discrimin)
+        button_fd_discrim = ttk.Button(self.window_so_discriminate, text = 'calculate fd ND', command = self.discrimin_normal_fd)
+        button_conv_discrim = ttk.Button(self.window_so_discriminate, text = 'calculate conv D', command = self.discrimin_nd_shift)
+        label_D_discrim = ttk.Label(self.window_so_discriminate, text = 'Advantage ratio: ')
+        label_D_discrim_value = ttk.Label(self.window_so_discriminate, textvariable = self.D_J)
+        self.discrimin_type = tk.StringVar(value = 'log scale')
+        combobox_discrm_type = ttk.Combobox(self.window_so_discriminate, textvariable = self.discrimin_type)
+        combobox_discrm_type['values'] = ['normalized', 'original', 'log scale']
         
-        label_tw_bot.grid(column = 0, row = 0)
-        entry_timewindow_bot.grid(column = 1, row = 0)
-        label_tw_top.grid(column = 2, row = 0)
-        entry_timewindow_top.grid(column = 3, row = 0)
-        button_cal_discrim.grid(column = 0, row = 1)
+        
+        
+        label_tw_bot.grid(column = 0, row = 0, sticky = 'w')
+        entry_timewindow_bot.grid(column = 1, row = 0, sticky = 'w')
+        label_tw_top.grid(column = 2, row = 0, sticky = 'w')
+        entry_timewindow_top.grid(column = 3, row = 0, sticky = 'w')
+        combobox_discrm_type.grid(column = 0, row = 1, sticky = 'w')
+        button_cal_discrim.grid(column = 1, row = 1, sticky = 'w')
+        button_D_discrim.grid(column = 2, row = 1, sticky = 'w')
+        button_fd_discrim.grid(column = 3, row = 1, sticky = 'w')
+        button_conv_discrim.grid(column = 4, row = 1, sticky = 'w')
+        label_D_discrim.grid(column = 0, row = 2, sticky = 'w')
+        label_D_discrim_value.grid(column = 1, row = 2, sticky = 'w')
+        
         
         '''window content for window_so_plot'''
         
         fig0 = Figure(figsize=(16,8))
         self.canvas0 = FigureCanvasTkAgg(figure=fig0,master=self.window_so_plot)
         self.canvas0.get_tk_widget().grid(column=0,row=0,columnspan=6,rowspan=6,sticky='nsew')
-        self.canvas0.figure, self.ax = plt.subplots(2,2,figsize=(16,8))
+        self.canvas0.figure, self.ax = plt.subplots(2,1,figsize=(16,8))
         self.canvas0.draw()
         
         '''window content for window_so_status'''
         self.label_status = ttk.Label(self.window_so_status, textvariable = self.status, font=('Times', 15))
+        
+        
         self.label_status.grid(column = 0, row = 0, columnspan = 3)
+    
+        
+        
     
     '''functions for button activities''' 
     
@@ -252,21 +341,27 @@ class SO_init:
         
     def select_wf_0(self):
         self.filenames_wf_0 = []
+        self.interpo_wf0 = {}
         self.idx_wf_0 = self.listbox_filenames.curselection()
         selection_fields = ''
         for i in self.idx_wf_0:
             selection_fields = selection_fields + self.filenames[i] + '\n'
             self.filenames_wf_0.append(self.filenames[i])
         self.selection_wf_0.set(selection_fields)
-        
+        for name in self.filenames_wf_0:
+            self.interpo_wf0[name] = UnivariateSpline(self.t[name], self.x[name], ext = 'zeros', k = 3, s = 0)
+            
     def select_wf_1(self):
         self.filenames_wf_1 = []
+        self.interpo_wf1 = {}
         self.idx_wf_1 = self.listbox_filenames.curselection()
         selection_fields = ''
         for i in self.idx_wf_1:
             selection_fields = selection_fields + self.filenames[i] + '\n'
             self.filenames_wf_1.append(self.filenames[i])
         self.selection_wf_1.set(selection_fields)
+        for name in self.filenames_wf_1:
+            self.interpo_wf1[name] = UnivariateSpline(self.t[name], self.x[name], ext = 'zeros', k = 3, s = 0)
     
     def select_so_0(self):
         self.filenames_so_0 = []
@@ -285,6 +380,8 @@ class SO_init:
             selection_fields = selection_fields + self.filenames[i] + '\n'
             self.filenames_so_1.append(self.filenames[i])
         self.selection_so_1.set(selection_fields)
+
+            
         
     def combine_waveforms_12(self):
         self.combined_wf = {}
@@ -297,21 +394,111 @@ class SO_init:
         else:
             self.status.set('number of WF 0 and WF 1 should be same')
             
+    def shift_wfs(self):
+        self.shift_wf0 = {}
+        self.shift_wf1 = {}
+        self.shift_time = {}
+        time_delays = self.so_phase_go.all_time_delays[self.n0.get()]
+        for key, time_delay in zip(self.interpo_wf0.keys(), time_delays):
+            newkey = 'shifted_'+key
+            # idx0 = np.where(self.t[key]>=self.t_left)[0][0]
+            # idx1 = np.where(self.t[key]<=self.t_right)[0][-1]
+            self.shift_wf0[key] = self.interpo_wf0[key](self.t[key]-time_delay)
+            # self.shift_time[key] = self.t[key]
+            self.x[newkey] = self.shift_wf0[key]
+            self.t[newkey] = self.t[key]
+            zero_filler0 = np.zeros_like(self.x[newkey])
+            spec_shift0 = np.stack((self.t[newkey], self.x[newkey], zero_filler0), axis = 1)      
+            np.savetxt(self.path + 'shifted_' + key + '_1.dat', spec_shift0)
+        for key, time_delay in zip(self.interpo_wf1.keys(), time_delays):
+            # idx0 = np.where(self.t[key]>=self.t_left)[0][0]
+            # idx1 = np.where(self.t[key]<=self.t_right)[0][-1]
+            self.shift_wf1[key] = self.interpo_wf1[key](self.t[key]-time_delay)
+            # self.shift_time[key] = self.t[key]
+            newkey = 'shifted_'+ key
+            self.x[newkey] = self.shift_wf1[key]
+            self.t[newkey] = self.t[key]
+            zero_filler1 = np.zeros_like(self.x[newkey])
+            spec_shift1 = np.stack((self.t[newkey], self.x[newkey], zero_filler1), axis = 1)
+            np.savetxt(self.path + 'shifted_' + key + '_1.dat', spec_shift1)
+            
+        self.status.set('waveform 1 and 2 shifted')
+        
+    # def sum_wfs(self):
+    #     self.x['sum_wf0'] = sum(self.x[key] for key in self.filenames_wf_0)
+    #     self.x['sum_wf1'] = sum(self.x[key] for key in self.filenames_wf_1)
+    #     self.t['sum_wf0']
+    #     for key1, key2 in zip(self.filenames_wf_0, self.filenames_wf_1):
+    #         wf0_sum = 
+    def simulate_so(self):
+        # self.simu_so0 = {}
+        # self.simu_so1 = {}
+        newkey_so0 = 'SO_simulated_' + self.bf.find_str_common(self.filenames[self.idx_wf_0[0]], self.filenames[self.idx_wf_0[1]])
+        self.x[newkey_so0] = sum(self.shift_wf0[key] for key in self.shift_wf0.keys())
+        self.t[newkey_so0] = self.t[self.filenames_wf_0[0]]
+        newkey_so1 = 'SO_simulated_' + self.bf.find_str_common(self.filenames[self.idx_wf_1[0]], self.filenames[self.idx_wf_1[1]])
+        self.x[newkey_so1] = sum(self.shift_wf1[key] for key in self.shift_wf1.keys())   
+        self.t[newkey_so1] = self.t[self.filenames_wf_1[0]]
+        # self.selection_so_0.set(newkey_so0)
+        # self.selection_so_1.set(newkey_so1)
+        self.listbox_filenames_content.set(list(self.x))
+        self.filenames = list(self.x)
+        zero_filler_1 = np.zeros_like(self.x[newkey_so0])
+        zero_filler_2 = np.zeros_like(self.x[newkey_so1])
+        spec1 = np.stack((self.t[newkey_so0],self.x[newkey_so0],zero_filler_1), axis = 1)
+        spec2 = np.stack((self.t[newkey_so1],self.x[newkey_so1],zero_filler_2), axis = 1)
+        np.savetxt(self.path + newkey_so0 + '_1.dat', spec1)
+        np.savetxt(self.path + newkey_so1 + '_1.dat', spec2)
+        
+        self.status.set('simulated superoscillation calculated')
+        
+        
     def calculate_so_phases(self):
         self.status.set('calculating time delays, please wait...')
         self.window_so_status.update()
         self.so_phase_go = Calculate_SO_phase(self.path, self.filenames_wf_0)
+        self.t_left = self.t[self.filenames_wf_0[0]][0]
+        self.t_right = self.t[self.filenames_wf_0[0]][-1]
         self.status.set('SO phases calculated')
         
+    def find_closest_so(self):
+        shift_wf0 = {}
+        x_all_ref = self.x[self.filenames_so_0[0]]
+        t_all_ref = self.t[self.filenames_so_0[0]]
+        x_so_ref = self.get_so_region(t_all_ref, x_all_ref)
+        max_ref = max(x_so_ref)
+        diff0 = sum(abs(x_so_ref-0))
+        for i in range(0,500):
+            time_delays = self.so_phase_go.all_time_delays[i]
+            for key, time_delay in zip(self.interpo_wf0.keys(), time_delays):
+                shift_wf0[key] = self.interpo_wf0[key](self.t[key]-time_delay)
+                x_all_sam = sum(shift_wf0[key] for key in shift_wf0.keys())
+                t_all_sam = self.t[self.filenames_wf_0[0]]
+                x_so_sam = self.get_so_region(t_all_sam, x_all_sam)
+                max_sam = max(x_so_sam)
+                x_so_sam = x_so_sam*(max_ref/max_sam)
+                diff1 = sum(abs(x_so_ref - x_so_sam))
+                if diff1 < diff0:
+                    diff0 = diff1
+                    self.n0.set(i)
+        
+    def get_so_region(self, t, x, l_tw = 1.2, t_step = 0.05):
+        t_points = round(l_tw/t_step)
+        t_start = (t[0] + t[-1])/2 - l_tw/2
+        idx_ts = np.where(t>=t_start)[0][0]
+        idx_te = idx_ts + t_points
+        x_so = x[idx_ts:idx_te]
+        return x_so
+    
     def discrimin_normal(self):
         timestep = 0.05
-        self.J = {}
-        self.tw_len = {}
         if len(self.idx_wf_0) == len(self.idx_wf_1) and len(self.idx_so_0) == len(self.idx_so_1):
             # calculate discriminability of basic waveforms
             for i in range (0, len(self.idx_wf_0)):
-                newkey = 'discriminability_' + self.bf.find_str_common(self.filenames[self.idx_wf_0[i]], self.filenames[self.idx_wf_1[i]])
+                newkey = 'WF_discriminability_'+ str(self.n_dis)+ '_' + self.bf.find_str_common(self.filenames[self.idx_wf_0[i]], self.filenames[self.idx_wf_1[i]])
                 self.J[newkey] = []
+                self.J_base[newkey] = []
+                self.J_log[newkey] = []
                 self.tw_len[newkey] = []
                 t = self.t[self.filenames[self.idx_wf_0[i]]]
                 E1 = self.x[self.filenames[self.idx_wf_0[i]]]
@@ -327,18 +514,24 @@ class SO_init:
                 while idx0 < idx1:
                     E1_w = E1[idx0:idx1]
                     E2_w = E2[idx0:idx1]
-                    peak1 = max(abs(E1_w))
+                    # peak1 = max(abs(E1_w))
                     self.tw_len[newkey].append(t[idx1] - t[idx0])
-                    self.J[newkey].append(simps(((E1_w-E2_w)/peak1)**2/abs(t[idx1]-t[idx0]),dx=timestep))
+                    J_temp = 2*simps(abs(E1_w-E2_w)**2)/simps(abs(E1_w)**2+abs(E2_w)**2)
+                    self.J[newkey].append(J_temp)
+                    self.J_base[newkey].append(simps((abs(E1_w**2-E2_w**2)), dx=timestep)/abs(t[idx1]-t[idx0]))
+                    self.J_log[newkey].append(np.log10(J_temp))
                     idx0 = idx0 + 1
                     idx1 = idx1 - 1
                 self.tw_len[newkey] = np.array(self.tw_len[newkey])
                 self.J[newkey] = np.array(self.J[newkey])
-                
+                self.J_base[newkey] = np.array(self.J_base[newkey])
+                self.J_log[newkey] = np.array(self.J_log[newkey])
             # calculate discriminability of superoscillations
             for j in range(0, len(self.idx_so_0)):
-                newkey = 'discriminability_' + self.bf.find_str_common(self.filenames[self.idx_so_0[j]], self.filenames[self.idx_so_1[j]])
+                newkey = 'SO_discriminability_' + str(self.n_dis) + '_' +self.bf.find_str_common(self.filenames[self.idx_so_0[j]], self.filenames[self.idx_so_1[j]])
                 self.J[newkey] = []
+                self.J_base[newkey] = []
+                self.J_log[newkey] = []
                 self.tw_len[newkey] = []
                 t = self.t[self.filenames[self.idx_so_0[j]]]
                 E1 = self.x[self.filenames[self.idx_so_0[j]]]
@@ -354,20 +547,25 @@ class SO_init:
                 while idx0 < idx1:
                     E1_w = E1[idx0:idx1]
                     E2_w = E2[idx0:idx1]
-                    peak1 = max(abs(E1_w))
+                    # peak1 = max(abs(E1_w))
+                    J_temp = 2*simps(abs(E1_w-E2_w)**2)/simps(abs(E1_w)**2+abs(E2_w)**2)
                     self.tw_len[newkey].append(t[idx1] - t[idx0])
-                    self.J[newkey].append(simps(((E1_w-E2_w)/peak1)**2/abs(t[idx1]-t[idx0]),dx=timestep))
+                    self.J[newkey].append(J_temp)
+                    self.J_base[newkey].append(simps((abs(E1_w**2-E2_w**2)), dx=timestep)/abs(t[idx1]-t[idx0]))
+                    self.J_log[newkey].append(np.log10(J_temp))
                     idx0 = idx0 + 1
                     idx1 = idx1 - 1
                 self.tw_len[newkey] = np.array(self.tw_len[newkey])
                 self.J[newkey] = np.array(self.J[newkey])
+                self.J_base[newkey] = np.array(self.J_base[newkey])
+                self.J_log[newkey] = np.array(self.J_log[newkey])
         else:
             if len(self.idx_wf_0) != len(self.idx_wf_1):
                 self.status.set('Correct Error: select same number of waveform1 and waveform2')
             if len(self.idx_so_0) != len(self.idx_so_1):
                 self.status.set('Correct Error: select same number of superosc1 and superosc2')
-                
-        self.canvas0.figure, self.ax = plt.subplots(1, 1, figsize = (16,8))
+        # plt.close()        
+        # self.canvas0.figure, self.ax = plt.subplots(1, 1, figsize = (16,8))
         # for key in list(self.J):
         #     self.ax.plot(self.tw_len[key], self.J[key], label = key)
         #     self.ax.legend(loc = 'best')
@@ -375,30 +573,286 @@ class SO_init:
         #     self.ax.set_ylabel('discriminability (arb.u.)', fontsize = 15)
         #     self.ax.tick_params(axis='both', labelsize=15)
         # self.canvas0.draw()
-        new_window = tk.Toplevel(self.window_so_plot)
-        plot_n1 = pt.Plottool(new_window, self.tw_len, self.J)
+        self.n_dis = self.n_dis + 1
+        if self.n_dis > 3:
+            self.tw_len = {}
+            self.J = {}
+            self.n_dis = 0
         
+        new_window = tk.Toplevel(self.root)
+        new_window.title('Discriminability time domain')
+        if self.discrimin_type.get() == 'normalized':
+            new_window.title('normalized discriminability')
+            plot_dis = pt.Plottool(new_window, self.tw_len, self.J)
+        if self.discrimin_type.get() == 'original':   
+            new_window.title('non normalized discriminability')
+            plot_dis = pt.Plottool(new_window, self.tw_len, self.J_base)
+        if self.discrimin_type.get() == 'log scale': 
+            new_window.title('log scale normalized discriminability')
+            plot_dis = pt.Plottool(new_window, self.tw_len, self.J_log)
+            
+            
+    # def discrimin_convolution(self):
+    #     t_ob = np.zeros(int(1.2/0.05)) + 1
+    #     if len(self.idx_wf_0) == len(self.idx_wf_1) and len(self.idx_so_0) == len(self.idx_so_1):
+    #         # calculate discriminability of basic waveforms
+    #         for i in range (0, len(self.idx_wf_0)):
+    #             newkey = 'WF_discriminability_'+ str(self.n_dis)+ '_' + self.bf.find_str_common(self.filenames[self.idx_wf_0[i]], 
+    #                                                                                             self.filenames[self.idx_wf_1[i]])
+    #             t = self.t[self.filenames[self.idx_wf_0[i]]]
+    #             E1 = self.x[self.filenames[self.idx_wf_0[i]]]
+    #             E2 = self.x[self.filenames[self.idx_wf_1[i]]]
+    #             I_diff = abs(E1**2-E2**2)
+    #             self.J_conv[newkey] = np.convolve(t_ob, I_diff, mode = 'valid')
+    #             self.tw_len[newkey] = t[0:len(self.J_conv[newkey])]
+    #         # calculate discriminability of superoscillations
+    #         for j in range(0, len(self.idx_so_0)):
+    #             newkey = 'SO_discriminability_' + str(self.n_dis) + '_' +self.bf.find_str_common(self.filenames[self.idx_so_0[j]], 
+    #                                                                                              self.filenames[self.idx_so_1[j]])
+    #             t = self.t[self.filenames[self.idx_so_0[j]]]
+    #             E1 = self.x[self.filenames[self.idx_so_0[j]]]
+    #             E2 = self.x[self.filenames[self.idx_so_1[j]]]
+    #             I_diff = abs(E1**2-E2**2)
+    #             self.J_conv[newkey] = np.convolve(t_ob, I_diff, mode = 'valid')
+    #             self.tw_len[newkey] = t[0:len(self.J_conv[newkey])]
+                
+    #     else:
+    #         if len(self.idx_wf_0) != len(self.idx_wf_1):
+    #             self.status.set('Correct Error: select same number of waveform1 and waveform2')
+    #         if len(self.idx_so_0) != len(self.idx_so_1):
+    #             self.status.set('Correct Error: select same number of superosc1 and superosc2')
+    #     # plt.close()        
+    #     # self.canvas0.figure, self.ax = plt.subplots(1, 1, figsize = (16,8))
+    #     # for key in list(self.J):
+    #     #     self.ax.plot(self.tw_len[key], self.J[key], label = key)
+    #     #     self.ax.legend(loc = 'best')
+    #     #     self.ax.set_xlabel('time window size (ps)', fontsize = 15)
+    #     #     self.ax.set_ylabel('discriminability (arb.u.)', fontsize = 15)
+    #     #     self.ax.tick_params(axis='both', labelsize=15)
+    #     # self.canvas0.draw()
+    #     self.n_dis = self.n_dis + 1
+    #     if self.n_dis > 3:
+    #         self.tw_len = {}
+    #         self.J = {}
+    #         self.n_dis = 0
+        
+    #     new_window = tk.Toplevel(self.root)
+    #     new_window.title('Discriminability convolution')
+    #     plot_dis = pt.Plottool(new_window, self.tw_len, self.J_conv)
+        
+    def discrimin_nd_shift(self):
+        timestep = 0.05
+        len_t = round(1.2/0.05)
+        if len(self.idx_wf_0) == len(self.idx_wf_1) and len(self.idx_so_0) == len(self.idx_so_1):
+            # calculate discriminability of basic waveforms
+            for i in range (0, len(self.idx_wf_0)):
+                newkey = 'WF_discriminability_'+ str(self.n_dis)+ '_' + self.bf.find_str_common(self.filenames[self.idx_wf_0[i]], self.filenames[self.idx_wf_1[i]])
+                self.J[newkey] = []
+                self.J_base[newkey] = []
+                self.J_log[newkey] = []
+                self.tw_len[newkey] = []
+                t = self.t[self.filenames[self.idx_wf_0[i]]]
+                E1 = self.x[self.filenames[self.idx_wf_0[i]]]
+                E2 = self.x[self.filenames[self.idx_wf_1[i]]]
+                idx0 = 0
+                while idx0 + len_t < len(t):
+                    E1_w = E1[idx0:idx0 + len_t]
+                    E2_w = E2[idx0:idx0 + len_t]
+                    # peak1 = max(abs(E1_w))
+                    J_temp = 2*simps(abs(E1_w**2-E2_w**2))/simps(abs(E1_w)**2+abs(E2_w)**2)
+                    self.tw_len[newkey].append(t[idx0])
+                    self.J[newkey].append(J_temp)
+                    self.J_base[newkey].append(simps((abs(E1_w**2-E2_w**2)), dx=timestep)/1.2)
+                    self.J_log[newkey].append(np.log10(J_temp))
+                    idx0 = idx0 + 1
+                self.tw_len[newkey] = np.array(self.tw_len[newkey])
+                self.J[newkey] = np.array(self.J[newkey])
+                self.J_base[newkey] = np.array(self.J_base[newkey])
+                self.J_log[newkey] = np.array(self.J_log[newkey])
+            # calculate discriminability of superoscillations
+            for j in range(0, len(self.idx_so_0)):
+                newkey = 'SO_discriminability_' + str(self.n_dis) + '_' +self.bf.find_str_common(self.filenames[self.idx_so_0[j]], self.filenames[self.idx_so_1[j]])
+                self.J[newkey] = []
+                self.J_base[newkey] = []
+                self.J_log[newkey] = []
+                self.tw_len[newkey] = []
+                t = self.t[self.filenames[self.idx_so_0[j]]]
+                E1 = self.x[self.filenames[self.idx_so_0[j]]]
+                E2 = self.x[self.filenames[self.idx_so_1[j]]]
+                idx0 = 0
+                while idx0 + len_t < len(t):
+                    E1_w = E1[idx0:idx0 + len_t]
+                    E2_w = E2[idx0:idx0 + len_t]
+                    # peak1 = max(abs(E1_w))
+                    J_temp = 2*simps(abs(E1_w**2-E2_w**2))/simps(abs(E1_w)**2+abs(E2_w)**2)
+                    self.tw_len[newkey].append(t[idx0])
+                    self.J[newkey].append(J_temp)
+                    self.J_base[newkey].append(simps((abs(E1_w**2-E2_w**2)), dx=timestep)/1.2)
+                    self.J_log[newkey].append(np.log10(J_temp))
+                    idx0 = idx0 + 1
+                self.tw_len[newkey] = np.array(self.tw_len[newkey])
+                self.J[newkey] = np.array(self.J[newkey])
+                self.J_base[newkey] = np.array(self.J_base[newkey])
+                self.J_log[newkey] = np.array(self.J_log[newkey])
+        else:
+            if len(self.idx_wf_0) != len(self.idx_wf_1):
+                self.status.set('Correct Error: select same number of waveform1 and waveform2')
+            if len(self.idx_so_0) != len(self.idx_so_1):
+                self.status.set('Correct Error: select same number of superosc1 and superosc2')
+        
+        new_window = tk.Toplevel(self.root)
+        new_window.title('Discriminability time domain')
+        if self.discrimin_type.get() == 'normalized':
+            new_window.title('normalized discriminability')
+            plot_dis = pt.Plottool(new_window, self.tw_len, self.J)
+        if self.discrimin_type.get() == 'original':   
+            new_window.title('non normalized discriminability')
+            plot_dis = pt.Plottool(new_window, self.tw_len, self.J_base)
+        if self.discrimin_type.get() == 'log scale': 
+            new_window.title('log scale normalized discriminability')
+            plot_dis = pt.Plottool(new_window, self.tw_len, self.J_log)
+            
+        self.n_dis = self.n_dis + 1
+        if self.n_dis > 3:
+            self.tw_len = {}
+            self.J = {}
+            self.n_dis = 0
+            
+    def discrimin_normal_fd(self):
+        # fstep = 0.
+        # dE_sum1 = 0
+        # dE_sum2 = 0
+        self.f, self.sx = dp.Basic_functions().fftx(self.x, self.t, 2)
+        self.Ef = dp.Basic_functions().dict_getabs(self.sx)
+        if len(self.idx_wf_0) == len(self.idx_wf_1) and len(self.idx_so_0) == len(self.idx_so_1):
+            # calculate discriminability of basic waveforms
+            for i in range (0, len(self.idx_wf_0)):
+                newkey = 'WF_discriminability_'+ str(self.n_dis)+ '_' + self.bf.find_str_common(self.filenames[self.idx_wf_0[i]], self.filenames[self.idx_wf_1[i]])
+                
+                f = self.f[self.filenames[self.idx_wf_0[i]]]
+                # sx1 = self.sx[self.filenames[self.idx_wf_0[i]]]
+                # sx2 = self.sx[self.filenames[self.idx_wf_1[i]]]
+                E1 = abs(self.sx[self.filenames[self.idx_wf_0[i]]])
+                E2 = abs(self.sx[self.filenames[self.idx_wf_1[i]]])
+                idx1 = np.where(f<1.6)[0][-1]
+                idx0 = np.where(f>0.1)[0][0]
+                # sx1_w = sx1[idx0:idx1]
+                # sx2_w = sx2[idx0:idx1]
+                E1_w = E1[idx0:idx1]
+                E2_w = E2[idx0:idx1]
+                # dE_sum1 = dE_sum1 + sx1_w
+                # dE_sum2 = dE_sum2 + sx2_w
+                # peak1 = max([max(E1_w),max(E2_w)])
+                self.f_J[newkey] = f[idx0:idx1]
+                # self.J[newkey] = abs(E1_w-E2_w)/peak1
+                # self.J_base[newkey] = abs(E1_w-E2_w)/peak1
+                # self.J_log[newkey] = np.log10(abs(E1_w-E2_w)/peak1)  
+                self.J[newkey] = abs(E1_w-E2_w)
+                self.J_base[newkey] = abs(E1_w-E2_w)
+                self.J_log[newkey] = np.log10(abs(E1_w-E2_w))   
+            # calculate discriminability of superoscillations
+            # newkey2 = 'WF_discriminability_sum_' + str(self.n_dis)
+            # self.J[newkey2] = abs(dE_sum1 - dE_sum2)
+            # self.f_J[newkey2] = f[idx0:idx1]
+            for j in range(0, len(self.idx_so_0)):
+                newkey = 'SO_discriminability_' + str(self.n_dis) + '_' +self.bf.find_str_common(self.filenames[self.idx_so_0[j]], self.filenames[self.idx_so_1[j]])
+                f = self.f[self.filenames[self.idx_so_0[j]]]
+                E1 = abs(self.sx[self.filenames[self.idx_so_0[j]]])
+                E2 = abs(self.sx[self.filenames[self.idx_so_1[j]]])
+                idx1 = np.where(f<1.6)[0][-1]
+                idx0 = np.where(f>0.1)[0][0]
+                E1_w = E1[idx0:idx1]
+                E2_w = E2[idx0:idx1]
+                # peak1 = max([max(E1_w),max(E2_w)])
+                self.f_J[newkey] = f[idx0:idx1]
+                # self.J[newkey] = abs(E1_w-E2_w)/peak1
+                # self.J_base[newkey] = abs(E1_w-E2_w)/peak1
+                # self.J_log[newkey] = np.log10(abs(E1_w-E2_w)/peak1)
+                self.J[newkey] = abs(E1_w-E2_w)
+                self.J_base[newkey] = abs(E1_w-E2_w)
+                self.J_log[newkey] = np.log10(abs(E1_w-E2_w))
+        else:
+       
+            if len(self.idx_wf_0) != len(self.idx_wf_1):
+                self.status.set('Correct Error: select same number of waveform1 and waveform2')
+                if len(self.idx_so_0) != len(self.idx_so_1):
+                    self.status.set('Correct Error: select same number of waveform1 and waveform2' + '\n'
+                                    +'Correct Error: select same number of superosc1 and superosc2')
+            else:
+                if len(self.idx_so_0) != len(self.idx_so_1):
+                    self.status.set('Correct Error: select same number of superosc1 and superosc2')
+
+        
+        new_window = tk.Toplevel(self.root)
+        new_window2 = tk.Toplevel(self.root)
+        new_window.title('Frequency Domain Discriminability')
+        if self.discrimin_type.get() == 'normalized':
+            new_window.title('normalized discriminability')
+            plot_fd = pt.Plottool(new_window2, self.f, self.Ef)
+            plot_dis = pt.Plottool(new_window, self.f_J, self.J)
+        if self.discrimin_type.get() == 'original':   
+            new_window.title('non normalized discriminability')
+            plot_dis = pt.Plottool(new_window, self.f_J, self.J_base)
+        if self.discrimin_type.get() == 'log scale': 
+            new_window.title('log scale normalized discriminability')
+            plot_dis = pt.Plottool(new_window, self.f_J, self.J_log)        
+        self.n_dis = self.n_dis + 1
+        if self.n_dis > 3:
+            self.tw_len = {}
+            self.J = {}
+            self.J_base = {}
+            self.J_log = {}
+            self.f_J = {}
+            self.n_dis = 0
+        
+    def D_discrimin(self):
+        D_all = []
+        for i in range(0,self.n_dis):
+            D_wf = 0
+            D_so = 0
+            n_wf = 0
+            n_so = 0
+            self.i = i
+            for key in self.tw_len.keys():
+                if 'SO_discriminability_'+str(i) in key:
+                    t = self.tw_len[key][np.where(self.tw_len[key]<=1.2)]
+                    J = self.J[key][np.where(self.tw_len[key]<=1.2)]
+                    D_so = D_so + simps(J, dx = abs(t[0]-t[1]))
+                    n_so = n_so + 1
+                    self.n_so = n_so
+                    
+                if 'WF_discriminability_'+str(i) in key:
+                    t = self.tw_len[key][np.where(self.tw_len[key]<=1.2)]
+                    J = self.J[key][np.where(self.tw_len[key]<=1.2)]
+                    D_wf = simps(J, dx = abs(t[0]-t[1])) + D_wf
+                    n_wf = n_wf + 1
+                    self.n_wf = n_wf
+            D_all.append(np.log10(D_so/n_so/(D_wf/n_wf)))
+                
+        self.D_J.set(str(D_all))
+            
         
                 
     def Local_f(self):
-        self.f_local = {}
+        newwindow = tk.Toplevel()
         if len(self.idx_so_0) != 0:
             for i in self.idx_so_0:
                 key = self.filenames[i]
+                newkey = 'local f'+key
                 E_cx = hilbert(self.x[key])
                 t = self.t[key]
                 phase = np.unwrap(np.angle(E_cx))
-                self.f_local[key] = self.bf.array_getderivative(t, phase)
-                self.ax[1][0].plot(t, self.f_local[key], label = 'local f'+key)
+                self.x[newkey] = self.bf.array_getderivative(t, phase)
+                self.t[newkey] = t
         if len(self.idx_so_1) != 0:
             for j in self.idx_so_1:
                 key = self.filenames[j]
                 E_cx = hilbert(self.x[key])
                 t = self.t[key]
                 phase = np.unwrap(np.angle(E_cx))
-                self.f_local[key] = self.bf.array_getderivative(t, phase)
-                self.ax[1][1].plot(t, self.f_local[key], label = 'local f'+key)
-        self.canvas0.draw()
+                self.x[newkey] = self.bf.array_getderivative(t, phase)
+                self.t[newkey] = t
+        plot_localf = pt.Plottool(newwindow, self.t, self.x)
     
     def display_timedelays(self):
         self.td1.set(str(self.so_phase_go.all_time_delays[self.n0.get()]))
@@ -411,15 +865,21 @@ class SO_init:
         self.ph2.set(str(np.array(self.so_phase_go.all_time_delays[self.n0.get()+1])+self.ph0))
         self.ph3.set(str(np.array(self.so_phase_go.all_time_delays[self.n0.get()+2])+self.ph0)) 
         
+    def plot_all(self):
+        newwindow = tk.Toplevel()
+        self.so_plotgo = pt.Plottool(newwindow, self.t, self.x)
+        
+    
     def plot_predictions(self):
         all_time_delays = self.so_phase_go.all_time_delays[self.n0.get():self.n0.get()+3]
-        self.canvas0.figure, self.ax = plt.subplots(2,2,figsize=(16,8))
-        plot0 = self.ax[0][0]
-        plot1 = self.ax[0][1]
+        plot0 = self.ax[0]
+        plot1 = self.ax[1]
+        plot0.cla()
+        plot1.cla()
         plot0.set_title('Best superoscilations')
     
         #long_time_window = 10 * time_window
-        long_time_window = self.so_phase_go.pulses[self.filenames[0]].time
+        long_time_window = self.so_phase_go.pulses[self.filenames[self.idx_wf_0[0]]].time
     
         for n, time_delays in enumerate(all_time_delays[:3]):
             #plt.plot(long_time_window, get_combined_field(time_delays, long_time_window), label="theory {}".format(n))
@@ -464,7 +924,12 @@ class SO_init:
     
         self.canvas0.figure.set_tight_layout(True)
         self.canvas0.draw()
-           
+        
+
+
+
+        
+    
 @dataclass
 class Pulse:
     time: np.ndarray
@@ -476,6 +941,7 @@ class Pulse:
     interp_field: InterpolatedUnivariateSpline = None
     err_lower_bound: InterpolatedUnivariateSpline = None
     err_upper_bound: InterpolatedUnivariateSpline = None
+ 
     
 class Calculate_SO_phase:
     def __init__(self, path, filenames_wf_base):
@@ -490,8 +956,9 @@ class Calculate_SO_phase:
             self.all_data = [np.loadtxt(_).T[:-1] for _ in self.filenames]
             self.times, self._individual_fields = zip(*self.all_data)
             self._individual_fields = np.array(self._individual_fields)
-            time_diff = self.times[0][0]+5
-            self.time = self.times[0]-time_diff
+            time_mid = round((self.times[0][0]+self.times[0][-1])/2)
+            time_diff = time_mid - 0
+            self.time = self.times[0] - time_diff
             self.label = name
             self.field = np.mean(self._individual_fields, axis=0)
             # Substract the mean from experimental fields to compensate for parasitic offset
@@ -590,10 +1057,14 @@ class Calculate_SO_phase:
         ])
         self.rand_initial_guess = set(tuple(_) for _ in self.rand_initial_guess.T)
         #print(rand_initial_guess)
-        # with Pool() as pool:
-        #     self.gradient_descent_results = set(pool.map(self.local_minimization, self.rand_initial_guess))
+        # Pool()
+        pool = Pool(processes = int(cpu_count()/2))
+        
+        self.gradient_descent_results = set(pool.map(self.local_minimization, self.rand_initial_guess))
             
-        self.gradient_descent_results = set(self.local_minimization(_) for _ in tqdm(self.rand_initial_guess))
+        # self.gradient_descent_results = set(self.local_minimization(_) for _ in (self.rand_initial_guess))
+        
+       
         self.gradient_descent_results = sorted(self.gradient_descent_results)
         self.intensity_without_ampl_modulation, self.all_time_delays = zip(*self.gradient_descent_results)
     
@@ -604,6 +1075,9 @@ class Calculate_SO_phase:
 
     def inegral_without_ampl_modulation(self,time_delays):
         return simps(self.get_combined_field(time_delays, self.time_window) ** 2, dx=self.dx)
+    
+    def integral_inverse(self, time_delays):
+        return 1/simps(self.get_combined_field(time_delays, self.time_window) ** 2, dx=self.dx)
 
     def jac_inegral_without_ampl_modulation(self,time_delays):
         
@@ -621,11 +1095,10 @@ class Calculate_SO_phase:
             bounds=self.bounds,
             options={'maxiter': 1000},
         )
-        
         # There is 2 decimal precision in the experiment 
         time_delays = np.round(result.x, 2)
-        
         return self.inegral_without_ampl_modulation(time_delays), tuple(time_delays)
+
     def gradient_method(self):
         gradient_descent_results = set(self.local_minimization(_) for _ in tqdm(self.rand_initial_guess))
         gradient_descent_results = sorted(gradient_descent_results)
@@ -638,9 +1111,10 @@ class Calculate_SO_phase:
                 for delay, _ in zip(time_delays, self.pulses.values())
             ))
    
-
     def get_unique_filename(fname):
         return fname.format(datetime.now().strftime("_%m-%d_%H-%M"))    
     
     
-    
+
+        
+

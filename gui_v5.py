@@ -24,19 +24,23 @@ import scipy as sp
 import pandas as pd
 import dataprocessor as dp
 import study as st
-import plottool_v3 as pt
+import plottool_v5 as pt
 import curfittool as cft
-import get_superoscilation_v2  as gso
-import SO_tools as sot
+# import get_superoscilation_v3  as gso
+import SO_tools_v2 as sot
 import configparser as cfp
 
 
 class Labtools:        
     def __init__(self):
         self.root = tk.Tk()
+        self.root.title('THz-TDS Data Processor')
         # self.root.columnconfigure(0,weight=1)
         # self.root.rowconfigure(0,weight=1)
         self.nb = ttk.Notebook(self.root)
+        self.nb.grid()
+        self.nb.columnconfigure(0, weight = 1)
+        self.nb.rowconfigure(0, weight = 1)
         # self.frame_transmission = ttk.Frame(self.nb)
         self.frame_plotdata = ttk.Frame(self.nb)
         self.frame_index = ttk.Frame(self.nb)
@@ -87,16 +91,23 @@ class Labtools:
         # self.nsam = tk.IntVar(value=1)
         # self.nref = tk.IntVar(value=1)
         # self.actiondisp = tk.StringVar(value='ready')
+        
+        # self.frame_loaddata.columnconfigure(0, weight = 1)
+        # self.frame_loaddata.rowconfigure(0, weight = 1)
         '''
-            load data frame
+            load data frame of load data notebook page
         '''
+        # self.frame_loaddata.columnconfigure(0, weight = 2)
+        # self.frame_loaddata.rowconfigure(0, weight = 2)
+        # self.frame_loaddata.rowconfigure(1, weight = 2)
+        # self.frame_loaddata.rowconfigure(2, weight = 2)
         # self.expstyle_key = tk.StringVar(value='sam+ref')
         mainframe = ttk.Labelframe(self.frame_loaddata,text='load data')
-        mainframe.pack(expand=True)
-        # mainframe.columnconfigure(0,weight=1)
-        # mainframe.columnconfigure(1,weight=1)
+        mainframe.grid(column = 0, row = 0, sticky = 'w')
+        mainframe.columnconfigure(0,weight=1)
+        mainframe.rowconfigure(0, weight = 1)
         typeentry = ttk.Combobox(mainframe,textvariable=self.expstyle_key,width=20)
-        typeentry['values'] = ('sam/ref','sam+ref','polarimetry_so')
+        typeentry['values'] = ('sam/ref','sam+ref','polarimetry_so', 'polarimetry_spec2')
         
         
         button_selectfolder = ttk.Button(mainframe,text='select folder',command=self.selectfolder)
@@ -132,30 +143,35 @@ class Labtools:
 
         
         
-        '''status frame'''
+        '''
+        status frame of loaddata notebook page
+        
+        '''
         
         window_status = ttk.Labelframe(self.frame_loaddata,text='Status')
-        window_status.pack(side=tk.BOTTOM,expand=True, fill=tk.BOTH)
-        label_action = ttk.Label(window_status,textvariable=self.actiondisp)
-        label_action.grid(column=1,row=6)
+        window_status.grid(column = 0, row = 2, sticky = 'w')
+        label_action = ttk.Label(window_status, textvariable = self.actiondisp, font = ('Arial',20))
+        label_action.grid(column = 0, row = 0)
         
         
         '''
-        study frame
+        study frame of loaddata notebook page
         '''
         frame_study = ttk.Labelframe(self.frame_loaddata,text='studies')
-        frame_study.pack(expand=True)
+        frame_study.grid(column = 0, row = 1, sticky = 'w')
         # frame_study.columnconfigure(0,weight=1)
         button_transmission = ttk.Button(frame_study,text='study transmission',command=self.study_transmission)
         button_index = ttk.Button(frame_study,text='study refractive index',command=self.study_index)
         button_polarimetry = ttk.Button(frame_study,text='study polarimetry',command=self.study_polarimetry)
         button_superosc =  ttk.Button(frame_study,text='get_SO',command=self.SO_spectrum)
+        # button_simu_so = ttk.Button(frame_study, text = 'simulate_SO', command = self.SO_artificial)
         
         
-        button_transmission.grid(column=0,row=0,sticky=tk.W)
-        button_index.grid(column=0,row=1)
-        button_polarimetry.grid(column=0,row=2,sticky=tk.W)
-        button_superosc.grid(column=0,row=3)
+        button_transmission.grid(column = 0,row = 0,sticky = 'w')
+        button_index.grid(column = 1,row = 0, sticky = 'w')
+        button_polarimetry.grid(column = 2,row = 0,sticky = 'w')
+        button_superosc.grid(column = 3,row = 0, sticky = 'w')
+        # button_simu_so.grid(column = 4, row = 0, sticky = 'w')
         
     def selectfolder(self):
         try:
@@ -191,6 +207,7 @@ class Labtools:
         self.config_labtools['gui_init_values']['exp_mode'] = self.expstyle_key.get()
         self.config_labtools['gui_init_values']['n_sam'] = str(self.nsam.get())
         self.config_labtools['gui_init_values']['n_ref'] = str(self.nref.get())
+        self.config_labtools['gui_init_values']['folder_path'] = self.folder
         with open('gui_init.ini', 'w') as gui_init:
              self.config_labtools.write(gui_init)
         
@@ -200,7 +217,7 @@ class Labtools:
     
     def basicprocess(self):
         if self.expstyle == 'sam+ref':
-            [xavg_sam,tavg_sam,xavg_ref,tavg_ref,comp1,comp2] = self.specgo.average_samref(self.x, self.t,self.nsam.get(),self.nref.get())
+            [xavg_sam,tavg_sam,xavg_ref,tavg_ref,comp1,comp2] = self.specgo.average_samref(self.x, self.t, self.nsam.get(), self.nref.get())
             # self.xsam = self.specgo.Totalfield(xavg_sam, yavg_sam)
             # self.xref = self.specgo.Totalfield(xavg_ref, yavg_ref)
             self.xsam = xavg_sam
@@ -213,10 +230,10 @@ class Labtools:
             self.tref = tavg_ref
             self.xcomp = comp1
             self.ycomp = comp2
-            self.freqsam,self.sxsam = dp.Basic_functions().fftx(self.xsam,self.tsam,2)
-            self.freqref,self.sxref = dp.Basic_functions().fftx(self.xref,self.tref,2)
-            self.freqxcomp,self.sxcomp = dp.Basic_functions().fftx(self.xcomp,self.tsam,2)
-            self.freqycomp,self.sycomp = dp.Basic_functions().fftx(self.ycomp,self.tref,2)
+            self.freqsam,self.sxsam = dp.Basic_functions().fftx_hilbert(self.xsam,self.tsam,2)
+            self.freqref,self.sxref = dp.Basic_functions().fftx_hilbert(self.xref,self.tref,2)
+            self.freqxcomp,self.sxcomp = dp.Basic_functions().fftx_hilbert(self.xcomp,self.tsam,2)
+            self.freqycomp,self.sycomp = dp.Basic_functions().fftx_hilbert(self.ycomp,self.tref,2)
             self.compall = self.specgo.combinedict(self.xcomp, self.ycomp)
             self.freqcompall = self.specgo.combinedict(self.freqxcomp, self.freqycomp)
             self.scompall = self.specgo.combinedict(self.sxcomp, self.sycomp)
@@ -269,6 +286,17 @@ class Labtools:
             self.plotgo_1 = pt.Plottool(self.frame_plotdata, self.tall, self.Eall)
             self.plotgo_2 = pt.Plottool(self.frame_plotdata_fd, self.freqsamy, self.sysam_abs)
             
+        if self.expstyle == 'polarimetry_spec2':
+            [self.t_x, self.xall, self.t_y, self.yall] = self.specgo.average_polarimetry_spec2(self.x, self.t, 1, 1)
+            self.freq_x, self.sx = dp.Basic_functions().fftx(self.xall, self.t_x, 2)
+            self.freq_y, self.sy = dp.Basic_functions().fftx(self.xall, self.t_y, 2)
+            self.spec_all = self.specgo.combinedict(self.xall, self.yall, subs='_y')
+            self.sx_all = self.specgo.combinedict(self.sx, self.sy, subs = '_y')
+            self.sx_all_abs = dp.Basic_functions().dict_getabs(self.sx_all)
+            self.tall = self.t_x
+            self.plotgo_1 = pt.Plottool(self.frame_plotdata, self.tall, self.xall)
+            self.plotgo_2 = pt.Plottool(self.frame_plotdata_fd, self.freq_x, self.sx_all_abs)
+            
         self.actiondisp.set('average and FFT done, process to plot to check result')    
 
     
@@ -285,7 +313,7 @@ class Labtools:
         if self.expstyle == 'sam+ref':
             self.transgo = st.study_transmission(self.window_transmission,self.freqsam, self.sxsam, self.sxref)
         if self.expstyle == 'sam/ref':
-            self.transgo = st.study_transmission(self.window_transmission, self.freqsam, self.sxall, self.sxall)
+            self.transgo = st.study_transmission(self.window_transmission, self.freqall, self.sxall, self.sxall)
         if self.expstyle == 'polarimetry_so':
             self.transgo = st.study_transmission(self.window_transmission, self.freqsamy, self.sysam, self.syref)
         
@@ -301,14 +329,19 @@ class Labtools:
     study polarimetr
     '''    
     def study_polarimetry(self):
-        self.polargo = st.study_polarimetry(self.frame_polarimetry, self.freqcompall, self.sxcomp, self.sycomp)
+        self.polargo = st.study_polarimetry(self.frame_polarimetry, self.t_x, self.xall, self.yall)
         self.actiondisp.set('Proceed to polarimetry study panel')
         
     def SO_spectrum(self):
         root = tk.Toplevel()
+        root.title('Superoscillation')
         # root = self.frame_getso
         self.build_SO = sot.SO_init(root, self.folder, self.xall, self.tall)
         # self.build_SO = gso.Display_SO(root)
+        
+    # def SO_artificial(self):
+    #     root = tk.Toplevel()
+    #     self.so_simulation = gso.Display_SO(root)
         
 # datago = Labtools()
 # datago.root.mainloop()

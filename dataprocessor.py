@@ -12,6 +12,7 @@ import copy
 from statistics import mean
 from scipy.signal.windows import blackman
 from numpy import pi
+from scipy.signal import hilbert
 
 class SpecProcess:
     def __init__(self,path,expstyle,filetype='.dat'):
@@ -24,16 +25,12 @@ class SpecProcess:
             self.pathlist[i] = self.pathlist[i].replace('\\','/')
             iter1 = re.finditer('/', self.pathlist[i])
             iter2 = re.finditer('_', self.pathlist[i])
-            # iter3 = re.finditer('\.dat',name)
-            for j in iter1:
+            for j in iter1:  #loop to last / sign
                 id1 = j
-            for k in iter2:
+            for k in iter2: #loop ot last _ sign
                 id2 = k
-            # for l in iter3:
-                #     id3 = l
-            id_backs = id1.end()
-            id_unders = id2.start()
-            #id_dot = id3.start()
+            id_backs = id1.end() #get the index after last /
+            id_unders = id2.start() # get the index before last _
             name = self.pathlist[i][id_backs:id_unders]
             if name in self.filenames:
                 continue
@@ -46,21 +43,33 @@ class SpecProcess:
         Tvalue = dict()
         for i in range(0,len(self.filenames)):
             self.pathname = glob.glob(self.path+'/'+self.filenames[i]+'_*[0-9]'+self.filetype)   
-            Nspec = len(self.pathname)
+            # Nspec = len(self.pathname)
             data0 = np.loadtxt(self.pathname[0])
             Ndata,Ncol = np.shape(data0)
-            x_store = np.zeros((Ndata,Nspec))
-            y_store = np.zeros((Ndata,Nspec))
-            t_store = np.zeros((Ndata,Nspec))
-            del Nspec,Ndata
-            for j in range(0,len(self.pathname)):
+            x_store = data0[:, 1]
+            x_store = x_store[:, np.newaxis]
+            if Ncol == 3:
+                y_store = data0[:, 2]
+                y_store = y_store[:, np.newaxis]
+            t_store = data0[:, 0]
+            t_store = t_store[:, np.newaxis]
+            del Ndata
+            for j in range(1,len(self.pathname)):
                 filenum = str(j+1)
-                data = np.loadtxt(self.path+'/'+self.filenames[i]+'_'+filenum+self.filetype)
-                x_store[:,j] = data[:,1]
-                if Ncol == 3:
-                    y_store[:,j] = data[:,2]
-                t_store[:,j] = data[:,0]
-                del data
+                try:
+                    data = np.loadtxt(self.path+'/'+self.filenames[i]+'_'+filenum+self.filetype)
+                except OSError:
+                    continue
+                else:
+                    data = np.loadtxt(self.path+'/'+self.filenames[i]+'_'+filenum+self.filetype)
+                    x_temp = data[:, 1][:, np.newaxis]
+                    t_temp = data[:, 0][:, np.newaxis]
+                    x_store = np.hstack((x_store, x_temp))
+                    if Ncol == 3:
+                        y_temp = data[:, 2][:, np.newaxis]
+                        y_store = np.hstack((y_store, y_temp))
+                    t_store = np.hstack((t_store, t_temp))
+                    del data
             # del self.pathname
             Xvalue[self.filenames[i]] = x_store
             Yvalue[self.filenames[i]] = y_store
@@ -133,17 +142,18 @@ class SpecProcess:
         comp1 = dict()
         comp2 = dict()
         for key in list(x):
+            self.key = key
             x_temp = x[key]
             t_temp = t[key]
-            self.t_temp=t_temp
+            self.t_temp = t_temp
             samx_sum = 0
             refx_sum = 0
-            self.n_cycle = round(np.size(x_temp,axis=1)/(nsam+nref))
-            for i in range(0,np.size(x_temp,axis=1)):
-                if i%(nsam+nref) < nsam:
-                    samx_sum = x_temp[:,i]+samx_sum
+            self.n_cycle = round(np.size(x_temp, axis = 1)/(nsam+nref))
+            for i in range(np.size(x_temp, axis=1)):
+                if i % (nsam+nref) < nsam:
+                    samx_sum = x_temp[:,i] + samx_sum
                 else:
-                    refx_sum = x_temp[:,i]+refx_sum
+                    refx_sum = x_temp[:,i] + refx_sum
             samx[key] = samx_sum/self.n_cycle
             samt[key] = t_temp[:,0]
             reft[key] = t_temp[:,nref]
@@ -151,6 +161,36 @@ class SpecProcess:
             comp1[key] = samx[key]+refx[key]
             comp2[key] = samx[key]-refx[key]
         return samx,samt,refx,reft,comp1,comp2
+    
+    def average_polarimetry_spec2(self, x, t, n_c1, n_c2, angle1 = pi/4, angle2 = pi/4, polarization = 'h'):
+        comp_x = {}
+        comp_y = {}
+        t_x = {}
+        t_y = {}
+        for key in list(x):
+            self.key = key
+            x_temp = x[key]
+            t_x[key] = t[key][:, 0]
+            t_y[key] = t[key][:, 0]
+            c1_sum = 0
+            c2_sum = 0
+            self.n_cycle = round(np.size(x_temp, axis = 1)/(n_c1+n_c2))
+            for i in range(np.size(x_temp, axis=1)):
+                if i % (n_c1+n_c2) < n_c1:
+                    c1_sum = x_temp[:,i] + c1_sum
+                else:
+                    c2_sum = x_temp[:,i] + c2_sum
+            
+            comp1 = c1_sum/self.n_cycle
+            comp2 = c2_sum/self.n_cycle
+            
+            if polarization == 'h':
+                comp_x[key] = comp1*np.cos(angle1) + comp2*np.cos(angle2)
+                comp_y[key] = comp1*np.sin(angle1) - comp2*np.sin(angle2)
+            else:
+                comp_x[key] = comp1 - comp2
+                comp_y[key] = comp1 + comp2
+        return t_x, comp_x, t_y, comp_y
     
     def Totalfield(self,xdata,ydata):
         filenames = list(xdata)
@@ -426,13 +466,22 @@ class Basic_functions:
         if type(x) is dict:
             x_new = x
         return x_new
+
     
-    def specchop(self,x,y,x0,xt):
-        idx0 = np.where(x>=x0)[0][0]
-        idxt = np.where(x<=xt)[0][-1]
-        x_new = x[idx0:idxt]
-        y_new = y[idx0:idxt]
-        return x_new,y_new
+    def array_chop_pad(self, x, y, x0, x1):
+        idx0 = np.where(x >= x0)[0][0]
+        idx1 = np.where(x <= x1)[0][-1]
+        pad0 = np.zeros_like(x[0:idx0]) + y[idx0]
+        pad1 = np.zeros_like(x[idx1:]) + y[idx1]
+        y_new = np.concatenate((pad0, y[idx0:idx1], pad1), axis = 0)
+        return y_new
+    
+    def array_chop(self, x, y, x0, x1):
+        idx0 = np.where(x >= x0)[0][0]
+        idx1 = np.where(x <= x1)[0][-1]
+        x_new = x[idx0:idx1]
+        y_new = y[idx0:idx1]
+        return x_new, y_new
     
     def findzeropoints(self,x,y):
         for i in range(0,len(x)-1):
@@ -450,46 +499,101 @@ class Basic_functions:
                 x0 = x[round(len(x)/2)]
         return x0
     
-    def getindex(self,freq,E_sam,E_ref,L,E_echo=None,c=3e8):
-        freq = self.formatinput(freq)
-        self.E_sam = self.formatinput(E_sam)
-        self.E_ref = self.formatinput(E_ref)
-        fname = list(freq)[0]
-        samname = list(self.E_sam)[0]
-        refname = list(self.E_ref)[0]
-        omega = freq[fname]*2*np.pi*1e12
-        if E_echo is None:
-            self.phi = np.unwrap((np.angle(E_sam[samname]/E_ref[refname])))
-            
-            n = dict()
-            n[samname] = self.phi/omega/L*c+1
-        else:
-            self.Lr = np.linspace(0.9*L,1.1*L,1000)
-            self.dn = np.zeros(len(self.Lr))
-            E_echo = self.formatinput(E_echo)
-            echoname = list(E_echo)[0]
-            # self.phi_sam = np.unwrap((np.angle(E_sam[samname]/E_ref[refname])),discont=pi/4)
-            # self.phi_echo = np.unwrap((np.angle(E_echo[echoname]/E_ref[refname])),discont=pi/4)
-            self.phi_sam = (np.angle(E_sam[samname]/E_ref[refname]))
-            self.phi_echo = (np.angle(E_echo[echoname]/E_ref[refname]))
-            for i in range(0,len(self.Lr)):
-                self.n_sam = self.phi_sam/omega/self.Lr[i]*c+1
-                self.n_echo = (self.phi_echo/omega/self.Lr[i]*c+1)/3          
-                self.dn[i] = np.nanmean(self.n_echo-self.n_sam)
-            self.L0 = self.find_1st_zero(self.Lr,self.dn)
-            n = dict()
-            n[samname] = self.phi_sam/omega/self.L0*c+1
-        return n
+    def normalize_signal(self, x):
+        x = self.formatinput(x)
+        x_normal = {}
+        keys = list(x)
+        for key in keys:
+            x_normal[key] = np.zeros_like(x[key])
+            dim = np.shape(x[key])
+            if len(dim) == 1:
+                x_max = x[key].max()
+                x_normal[key] = x[key]/x_max
+            if len(dim) == 2:
+                x_max = x[key].max(axis = 1)
+                for i in range(0, dim[1]):
+                    x_normal[key][:, i] = x[key][:, i]/x_max[i]
+        return x_normal
     
-    def getindex_array(self,freq,E_sam,E_ref,L,E_echo=None,c=3e8):
+    def normalize_signal_samref(self, x):
+        x = self.formatinput(x)
+        x_normal = {}
+        keys = list(x)
+        for key in keys:
+            if key+'_ref' in keys:
+                x_max = x[key+'_ref'].max()
+                x_normal[key] = x[key]/x_max
+            else:
+                x_max = x[key].max()
+                x_normal[key] = x[key]/x_max
+        return x_normal
+    
+    # def signal_noise_filter(self, x):
+    #     x = self.formatinput(x)
+    #     x_filter = {}
+    #     keys= list(x)
+    #     for key in keys:
+    #         x_filter[key] = np.zeros_like(x[key])
+    #         dim = np.shape(x[key])
+    #         if len(dim) == 1:
+    #             x_max = x[key].max()
+    #             for j in range(0, len(x[key])):
+    #                 x_normal = x[key][j]/x_max
+    #                 if x_normal <= 1e-3:
+    #                     x_filter[key][j] = 0
+    #                 else:
+    #                     x_filter[key][j] = x[key][j]
+    #         if len(dim) == 2:
+    #             x_max = x[key].max(axis = 1)
+    #             for i in range(0, dim[1]):
+    #                 for j in range(0, len(x[key][:, i])):   
+    #                     x_normal = x[key][j, i]/x_max[i]
+    #                     if x_normal <= 1e-3:
+    #                         x_filter[key][j, i] = 0
+    #                     else:
+    #                         x_filter[key][j, i] = x[key][j, i]
+    #     return x_filter
+    
+    # def getindex(self,freq,E_sam,E_ref,L,E_echo=None,c=3e8):
+    #     freq = self.formatinput(freq)
+    #     self.E_sam = self.formatinput(E_sam)
+    #     self.E_ref = self.formatinput(E_ref)
+    #     fname = list(freq)[0]
+    #     samname = list(self.E_sam)[0]
+    #     refname = list(self.E_ref)[0]
+    #     omega = freq[fname]*2*np.pi*1e12
+    #     if E_echo is None:
+    #         self.phi = np.unwrap((np.angle(E_sam[samname]/E_ref[refname])))
+            
+    #         n = dict()
+    #         n[samname] = self.phi/omega/L*c+1
+    #     else:
+    #         self.Lr = np.linspace(0.9*L,1.1*L,1000)
+    #         self.dn = np.zeros(len(self.Lr))
+    #         E_echo = self.formatinput(E_echo)
+    #         echoname = list(E_echo)[0]
+    #         # self.phi_sam = np.unwrap((np.angle(E_sam[samname]/E_ref[refname])),discont=pi/4)
+    #         # self.phi_echo = np.unwrap((np.angle(E_echo[echoname]/E_ref[refname])),discont=pi/4)
+    #         self.phi_sam = (np.angle(E_sam[samname]/E_ref[refname]))
+    #         self.phi_echo = (np.angle(E_echo[echoname]/E_ref[refname]))
+    #         for i in range(0,len(self.Lr)):
+    #             self.n_sam = self.phi_sam/omega/self.Lr[i]*c+1
+    #             self.n_echo = (self.phi_echo/omega/self.Lr[i]*c+1)/3          
+    #             self.dn[i] = np.nanmean(self.n_echo-self.n_sam)
+    #         self.L0 = self.find_1st_zero(self.Lr,self.dn)
+    #         n = dict()
+    #         n[samname] = self.phi_sam/omega/self.L0*c+1
+    #     return n
+    
+    def getindex_array(self,freq,sx_sam,sx_ref,L,SX_echo=None,c=3e8, ph_mod = None):
         '''
         Parameters
         ----------
         freq : np.array
             DESCRIPTION.frequency of the spectrums
-        E_sam : np.array
+        E_sam : 1d np.array
             DESCRIPTION.sample spectrum
-        E_ref : np.array
+        E_ref : 1d np.array
             DESCRIPTION.reference spectrum
         L : float
             DESCRIPTION.initial guess of the sample thickness
@@ -502,13 +606,37 @@ class Basic_functions:
         n : np.array
             DESCRIPTION. calcullated refractive index
         '''
+        
+        
+        
+        # E_sam = sx_sam
+        # E_ref = sx_ref
+        # freq, E_sam, E_ref = self.badtrans_remove(freq, sx_sam, sx_ref)
+        freq, E_sam, E_ref = self.FD_noise_remove(freq, sx_sam, sx_ref)
         omega = freq*2*pi*1e12
+        
         self.freq  = freq
-        if E_echo is None: #if there is no echo in the scan
-            self.phi = abs(np.unwrap(np.angle(E_sam/E_ref))) #calculate phase of transmission
+        if SX_echo is None: #if there is no echo in the scan
+            
+            # self.phi = np.angle(E_sam/E_ref) #calculate phase of transmission
+            if ph_mod == None:
+                self.phi_sam = abs(np.unwrap(np.angle(E_sam), discont = pi/4))
+                self.phi_ref = abs(np.unwrap(np.angle(E_ref), discont = pi/4))
+
+            else:
+                self.phi_sam = abs(np.unwrap(np.angle(E_sam), discont = pi/4))
+                self.phi_ref = abs(np.unwrap(np.angle(E_ref), discont = pi/4))
+                self.phi_sam = self.phi_sam + ph_mod
+                # self.phi_ref += ph_mod
+            
+            self.phi = np.unwrap(self.phi_sam - self.phi_ref, discont = pi/4)
+            # self.phi = np.unwrap(self.phi, discont = pi/4)
+            # self.phi = abs(self.phi)
             n = self.phi/omega/L*c+1 # calculate refractive index
+            # n = self.index_normal(freq, n)
             
         else:
+            freq, E_sam, E_ref, E_echo = self.badtrans_remove(freq, sx_sam, sx_ref, E_echo = SX_echo)
             self.Lr = np.linspace(0.8*L,1.2*L,1000) #create a range of estimated thickness
             self.dn = np.zeros((len(self.freq),len(self.Lr))) #prepare dn to store the refractive index difference
             # self.L0 = np.zeros(len(self.freq))
@@ -530,19 +658,95 @@ class Basic_functions:
             self.L0 = L
             n = self.phi_sam/omega/self.L0*c+1 #use the true thickness to calculate refractive index
             n = self.index_normal(n)
-        return n
+            
+        a = -2/L*np.log(abs(E_sam)/abs(E_ref)*(1+n)**2/4/n)
+        # k = np.imag(n)
+        # a = -4*pi*freq*k/c
+        return  freq, E_sam, E_ref, n, a, self.phi_sam, self.phi_ref
     
-    def index_normal(self,n):
-        if n[-1]<1:
-            n = n+(1-n[-1])
-        else:
-            n = n
-        return n
+    def badtrans_remove(self, freq, E_sam, E_ref, freq_limit = 3):
+        idx_limit = np.where(freq <= freq_limit)[0][-1]
+        self.T = (abs(E_sam)/abs(E_ref))[0:idx_limit]
+        self.idxs = np.where(self.T >= 1)[0]
+        d0 = 0
+        idx0 = 0
+        for i in range(0, len(self.idxs)-1):
+            d1 = self.idxs[i+1]-self.idxs[i]
+            if d1 >= d0:
+                idx0 = self.idxs[i] + 1
+                idx1 = self.idxs[i+1] - 1
+                d0 = d1
+        # self.idx0 = idx0 
+        # self.idx1 = idx1
+        E_sam = E_sam[idx0:idx1]
+        E_ref = E_ref[idx0:idx1]
+        freq = freq[idx0:idx1]
+        return freq, E_sam, E_ref
+    def FD_noise_remove(self, f, sx_sam, sx_ref, sx_echo = None):
+        idx0 = np.where(f>0.1)[0][0]
+        idx1 = np.where(f>3)[0][0]
+        # idx1 = np.where(f<8)[0][-1]
+        noise_sam = np.max(abs(sx_sam[idx1:]))
+        # noise_ref = np.max(abs(sx_sam[idx0:]))
+        idx_sam_0 = idx0
+        idx_sam_1 = np.where(abs(sx_sam)>noise_sam)[0][-1]
+        sx_sam_filter = sx_sam[idx_sam_0:idx_sam_1]
         
-    def special_unwrap(self,angle,freq,f_t):
-        idx_max = np.where(freq>=f_t)[0][0]
-        angle = np.hstack((angle[0:idx_max],np.unwrap(angle[idx_max:],discont=pi/4)))
-        return angle
+        # idx_ref_0 = np.where(abs(sx_ref)>noise_ref)[0][0]
+        # idx_ref_1 = np.where(abs(sx_ref)>noise_ref)[0][-1]
+        sx_ref_filter = sx_ref[idx_sam_0:idx_sam_1]
+        
+        f_filter = f[idx_sam_0:idx_sam_1]
+        return f_filter, sx_sam_filter, sx_ref_filter
+        
+    
+    def weak_signal_remove(self, x, threshold = 1e-2):
+        # x = self.formatinput(x)
+        for key in x:
+            x_temp = x[key]
+            if len(np.shape(x_temp)) == 1:
+                max_x = max(x_temp)
+                for i in range(0, len(x_temp)):
+                    ratio = abs(x_temp[i])/max_x
+                    if ratio <= threshold:
+                        x_temp[i] = x_temp[i] / 10
+            else:
+                max_x = x_temp.max(axis = 1)
+                for i in range(0, len(max_x)):
+                    for j in range(0, len(x_temp[:, i])):
+                        ratio = abs(x_temp[j, i])/max_x[i]
+                        if ratio <= threshold:
+                            x_temp[j, i] = x_temp[j, i] / 10
+            x[key] = x_temp   
+        return x
+    # def index_normal(self, f, n):
+    #     idx = np.where(f>3)[0][0]
+    #     n_min = min(n[idx:])
+    #     if n_min < 1:
+    #         n = n+(1-n_min)
+    #     return n
+    # def unwrap_to_inf(self, phi):
+    #     for i in range(0,len(phi)-1):
+    #         if phi[i+1] - phi[i] >= pi:
+    #             phi[0:i+1] = phi[0:i+1] + 2*pi
+    #     return phi
+    
+    # def reverse_unwrap(self, phi):
+    #     phi_r = np.flip(phi)
+    #     phi_wrap = np.unwrap(phi_r)
+    #     phi_out = np.flip(phi_wrap)
+    #     return phi_out
+    
+    # def partial_unwrap(self, phi):
+    #     phi_out = np.zeros_like(phi)
+    #     phi_peak = max(phi)
+    #     idx = np.where(phi == phi_peak)[0][0]
+    #     phi_wrap = np.unwrap(phi[idx:])
+    #     phi_out[idx:] = phi_wrap
+    #     phi_out[0:idx] = phi[0:idx]
+    #     return phi_out
+        
+
     
     def fftx_filter(self,xvalues,tvalues,pad):
         xvalues = self.formatinput(xvalues)
@@ -603,8 +807,8 @@ class Basic_functions:
                 # self.sx[name] = self.SX
                 self.sx[name] = self.SX[0:int(NFFT/2)]
                 self.freq[name] = fs/2*np.linspace(0,1,len(self.sx[name]))
-                self.freq[name] = self.freq[name][np.where(self.freq[name]>0.1)]
-                self.sx[name] = self.sx[name][np.where(self.freq[name]>0.1)]
+                # self.freq[name] = self.freq[name][np.where(self.freq[name]>0.1)]
+                # self.sx[name] = self.sx[name][np.where(self.freq[name]>0.1)]
             else:
                 if len(dim2) == 1:
                     ts = abs(tvalues[name][1]-tvalues[name][0])
@@ -617,8 +821,48 @@ class Basic_functions:
                 self.sx[name] = self.SX[0:int(NFFT/2),:]
                 # self.sx[name] = self.SX
                 self.freq[name] = fs/2*np.linspace(0,1,len(self.sx[name]))
-                self.freq[name] = self.freq[name][np.where(self.freq[name]>0.1)]
-                self.sx[name] = self.sx[name][np.where(self.freq[name]>0.1)]
+                # self.freq[name] = self.freq[name][np.where(self.freq[name]>0.1)]
+                # self.sx[name] = self.sx[name][np.where(self.freq[name]>0.1)]
+        return self.freq,self.sx 
+    
+    def fftx_hilbert(self,xvalues,tvalues,pad):
+        xvalues = self.formatinput(xvalues)
+        tvalues = self.formatinput(tvalues)
+        self.sx = dict()
+        self.freq = dict()
+        for name in list(xvalues):
+            dim = np.shape(xvalues[name])
+            dim2 = np.shape(tvalues[name])
+            if len(dim) == 1: 
+                if len(dim2) == 1:
+                    ts = abs(tvalues[name][1]-tvalues[name][0])
+                if len(dim2) == 2:
+                    ts = abs(tvalues[name][1,0]-tvalues[name][0,0])
+                NFFT = int(2**(np.ceil(np.log2(len(tvalues[name])))+pad))
+                fs = 1/ts
+                xvalue_reduce = xvalues[name] - np.average(xvalues[name],axis=0)
+                xvalue_complex = hilbert(xvalue_reduce)
+                self.SX = np.fft.fft(xvalue_complex,n = NFFT)
+                # self.sx[name] = self.SX
+                self.sx[name] = self.SX[0:int(NFFT/2)]
+                self.freq[name] = fs/2*np.linspace(0,1,len(self.sx[name]))
+                # self.freq[name] = self.freq[name][np.where(self.freq[name]>0.1)]
+                # self.sx[name] = self.sx[name][np.where(self.freq[name]>0.1)]
+            else:
+                if len(dim2) == 1:
+                    ts = abs(tvalues[name][1]-tvalues[name][0])
+                if len(dim2) == 2:
+                    ts = abs(tvalues[name][1,0]-tvalues[name][0,0])
+                NFFT = int(2**(np.ceil(np.log2(len(tvalues[name])))+pad))
+                fs = 1/ts
+                xvalue_reduce = xvalues[name]-np.average(xvalues[name],axis=0)
+                xvalue_complex = hilbert(xvalue_reduce)
+                self.SX = np.fft.fft(xvalue_complex,n = NFFT, axis = 0)
+                self.sx[name] = self.SX[0:int(NFFT/2),:]
+                # self.sx[name] = self.SX
+                self.freq[name] = fs/2*np.linspace(0,1,len(self.sx[name]))
+                # self.freq[name] = self.freq[name][np.where(self.freq[name]>0.1)]
+                # self.sx[name] = self.sx[name][np.where(self.freq[name]>0.1)]
         return self.freq,self.sx 
     
     def fftx_omega(self,xvalues,tvalues,pad):
@@ -663,6 +907,19 @@ class Basic_functions:
         # sx = sx[np.where(freq>0.1)]
         return freq,sx 
     
+    def array_fftx_hilbert(self,xvalues,tvalues,pad=2):
+        ts = abs(tvalues[1]-tvalues[0])
+        NFFT = int(2**(np.ceil(np.log2(len(tvalues)))+pad))
+        fs = 1/ts
+        xvalue_reduce = xvalues-np.average(xvalues)
+        xvalue_hilbert = hilbert(xvalue_reduce)
+        SX = np.fft.fft(xvalue_hilbert,n=NFFT)
+        sx = SX[0:int(NFFT/2)]
+        freq = fs/2*np.linspace(0,1,len(sx))
+        # freq = freq[np.where(freq>0.1)]
+        # sx = sx[np.where(freq>0.1)]
+        return freq,sx 
+    
     def array_ifftx(self,t,sx):
         # fs = abs(f[1]-f[0])
         NFFT = 2*len(sx)
@@ -673,7 +930,7 @@ class Basic_functions:
         x = X[0:len(t)]
         # freq = freq[np.where(freq>0.1)]
         # sx = sx[np.where(freq>0.1)]
-        return 2*x
+        return x
     
     def ifftx(self,sxvalues,fvalues,pad):
         sxvalues = self.formatinput(sxvalues)
@@ -759,7 +1016,7 @@ class Basic_functions:
     
     def dict_total_field(self,sx,sy):
         sall = dict() 
-        for key,value in sx.items():
+        for key in sx.keys():
             if key in list(sy):
                 sall[key] = np.sqrt(sx[key]**2+sy[key]**2)
         return sall
@@ -797,3 +1054,29 @@ class Basic_functions:
         for key,value in x.items():
             x_sq[key] = x[key]**2
         return x_sq
+    
+    def find_list_common(self, str_list):
+        str_list = list(str_list)
+        com_str = ''
+        if len(str_list) == 1:
+            com_str = str_list[0]
+        else:
+            for i in range(0, len(str_list)-1):
+                str1 = str_list[i]
+                str2 = str_list[i+1]
+                str1_s = str1.split('_')
+                str2_s = str2.split('_')
+                for chars in str1_s:
+                    if chars in str2_s:
+                        if chars not in com_str:
+                            com_str = com_str + chars + '_'
+        return com_str
+    
+    def find_str_common(self, str1, str2):
+        com_str = ''
+        str1_char = str1.split('_')
+        str2_char = str2.split('_')
+        for char in str1_char:
+            if char in str2_char:
+                com_str = com_str + char + '_'
+        return com_str
