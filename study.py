@@ -2,14 +2,14 @@ import tkinter as tk
 from tkinter import ttk
 import dataprocessor as dp
 import numpy as np
-import plottool_v5 as pt
+import plottool_v7 as pt
 from matplotlib.figure import Figure
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg,NavigationToolbar2Tk
 import copy
 import matplotlib.pyplot as plt
 import configparser as cfp
 from numpy import pi
-
+from dataprocessor import Basic_functions as bf
 
 class study_transmission:
     def __init__(self,frame,freq,sxsam,sxref):
@@ -21,10 +21,10 @@ class study_transmission:
         self.ref_selected = tk.StringVar(value = 'None \n')
         self.window1 = ttk.Labelframe(self.frame_tr,text='main')
         self.window1.grid(column=0,row=0)
-        self.name_sam = list(sxsam)
-        self.name_ref = list(sxref)
-        self.list_sam = tk.StringVar(value=self.name_sam)
-        self.list_ref = tk.StringVar(value=self.name_ref)
+        self.fnames_sam = list(sxsam)
+        self.fnames_ref = list(sxref)
+        self.list_sam = tk.StringVar(value=self.fnames_sam)
+        self.list_ref = tk.StringVar(value=self.fnames_ref)
         self.action = tk.StringVar(value='ready')
         self.listbox_sam= tk.Listbox(self.window1,listvariable=self.list_sam,selectmode='extended', width = 30)
         self.listbox_ref= tk.Listbox(self.window1,listvariable=self.list_ref,selectmode='extended', width = 30)
@@ -67,7 +67,7 @@ class study_transmission:
         self.idx_sam = self.listbox_sam.curselection()
         display = ''
         for i in self.idx_sam:
-            display = display + self.name_sam[i] + '\n'
+            display = display + self.fnames_sam[i] + '\n'
         self.sam_selected.set(display)    
         self.action.set('sample scans selected')
         
@@ -75,7 +75,7 @@ class study_transmission:
         self.idx_ref = self.listbox_ref.curselection()
         display = ''
         for i in self.idx_ref:
-            display = display + self.name_ref[i] + '\n'
+            display = display + self.fnames_ref[i] + '\n'
         self.ref_selected.set(display) 
         self.action.set('reference scans selected')
     
@@ -85,31 +85,31 @@ class study_transmission:
         self.freq_plot = {}
         if len(self.idx_sam) == len(self.idx_ref) and len(self.idx_ref) != 1:
             for i in range(0,len(self.idx_sam)):
-               self.transmission[self.name_sam[self.idx_sam[i]]] = abs(self.sxsam[self.name_sam[self.idx_sam[i]]])/abs(self.sxref[self.name_ref[self.idx_ref[i]]])
-               self.transmission_cx[self.name_sam[self.idx_sam[i]]] = self.sxsam[self.name_sam[self.idx_sam[i]]]/self.sxref[self.name_ref[self.idx_ref[i]]]
-               self.freq_plot[self.name_sam[self.idx_sam[i]]] = self.freq[self.name_sam[self.idx_sam[i]]]
+               self.transmission[self.fnames_sam[self.idx_sam[i]]] = abs(self.sxsam[self.fnames_sam[self.idx_sam[i]]])/abs(self.sxref[self.fnames_ref[self.idx_ref[i]]])
+               self.transmission_cx[self.fnames_sam[self.idx_sam[i]]] = self.sxsam[self.fnames_sam[self.idx_sam[i]]]/self.sxref[self.fnames_ref[self.idx_ref[i]]]
+               self.freq_plot[self.fnames_sam[self.idx_sam[i]]] = self.freq[self.fnames_sam[self.idx_sam[i]]]
         
         if len(self.idx_ref) == 1 and len(self.idx_sam) == 1:
-            self.transmission[self.name_sam[self.idx_sam[0]]] = abs(self.sxsam[self.name_sam[self.idx_sam[0]]])/abs(self.sxref[self.name_ref[self.idx_ref[0]]])
-            self.transmission_cx[self.name_sam[self.idx_sam[0]]] = self.sxsam[self.name_sam[self.idx_sam[0]]]/self.sxref[self.name_ref[self.idx_ref[0]]]
-            self.freq_plot[self.name_sam[self.idx_sam[0]]] = self.freq[self.name_sam[self.idx_sam[0]]]
+            self.transmission[self.fnames_sam[self.idx_sam[0]]] = abs(self.sxsam[self.fnames_sam[self.idx_sam[0]]])/abs(self.sxref[self.fnames_ref[self.idx_ref[0]]])
+            self.transmission_cx[self.fnames_sam[self.idx_sam[0]]] = self.sxsam[self.fnames_sam[self.idx_sam[0]]]/self.sxref[self.fnames_ref[self.idx_ref[0]]]
+            self.freq_plot[self.fnames_sam[self.idx_sam[0]]] = self.freq[self.fnames_sam[self.idx_sam[0]]]
         self.action.set('transmission calculated')
         
     def export_complex_transmission(self):
         path = tk.filedialog.askdirectory()
-        for key in list(self.transmission_cx):
+        for key in list(self.transmission):
             filename = path + '/' + 'trans_' + key + '_1.dat'
             # trans_real = np.real(self.transmission_cx[key])
             # trans_imag = np.imag(self.transmission_cx[key])
             # trans_out = np.stack((trans_real, trans_imag), axis = 1)
             # np.savetxt(filename, trans_out)
-            trans_out = np.stack((self.freq_plot[key], self.transmission_cx[key]), axis = 1)
+            trans_out = np.stack((self.freq_plot[key], self.transmission[key]), axis = 1)
             np.savetxt(filename, trans_out)
                 
     def combine_select_ref(self):
         self.idx_ref = self.listbox_datas.curselection()
         for i in self.idx_ref:
-            self.sxref[self.name_ref[i]] = (self.sxref[self.name_ref[i]] + self.sxref[self.name_ref[i+1]])/2
+            self.sxref[self.fnames_ref[i]] = (self.sxref[self.fnames_ref[i]] + self.sxref[self.fnames_ref[i+1]])/2
         self.action.set('reference combined')
             
     def checktrans(self):
@@ -118,11 +118,13 @@ class study_transmission:
 
 
 class study_index:
-    def __init__(self,frame,x,t):
+    def __init__(self,frame,x,t, path = None):
         self.x = copy.deepcopy(x)
         self.t = copy.deepcopy(t)
         self.x_backup = copy.deepcopy(x)
         self.t_backup = copy.deepcopy(t)
+        if path != None:
+            self.path = path
         # self.x = dp.Basic_functions().normalize_signal_samref(self.x)
         self.frame_si = frame
         self.window_1 = ttk.Labelframe(self.frame_si,text='main')
@@ -133,10 +135,10 @@ class study_index:
         self.window_2.grid(column=1,row=0)
         self.window_3.grid(column=0,row=2)
         self.window_4.grid(column = 0, row = 1)
-        self.name = list(x)
-        self.list = tk.StringVar(value=self.name)
+        self.fnames = list(x)
+        self.list = tk.StringVar(value=self.fnames)
         # self.si_action = tk.StringVar(value='ready')
-        self.si_listbox= tk.Listbox(self.window_1,listvariable=self.list,selectmode='extended')
+        self.si_listbox= tk.Listbox(self.window_1,listvariable=self.list,selectmode='extended', width = 50)
         self.si_idx_echo = None
         try:
             open('study.ini')
@@ -166,6 +168,7 @@ class study_index:
         
         '''window content for window_1: operate spectrums'''
         
+        
         button_select_sam = ttk.Button(self.window_1,text='use selection as sample',command=self.si_select_sam)
         button_select_ref = ttk.Button(self.window_1,text='use selection as reference',command=self.si_select_ref)
         button_select_echo = ttk.Button(self.window_1,text='use selection as echo',command=self.si_select_echo)
@@ -183,14 +186,14 @@ class study_index:
         button_chopspec_sam = ttk.Button(self.window_1,text='chop sample spec',command=self.chop_sam_spec)
         button_chopspec_ref = ttk.Button(self.window_1,text='chop reference spec',command=self.chop_ref_spec)
         button_buildpec_echo = ttk.Button(self.window_1,text='chop echo spec',command=self.build_echo_spec)
-        button_padspec = ttk.Button(self.window_1,text='pad specs', command=self.pad_spec)
+        button_padspec = ttk.Button(self.window_1,text='pad specs', command=self.pad_spec_simple)
         button_save_default = ttk.Button(self.window_1, text = 'save as default', command = self.build_config_file)
         button_show_selected = ttk.Button(self.window_1, text = 'show selected', command = self.plot_selected)
         button_restore = ttk.Button(self.window_1, text = 'restore spectrums', command = self.restore_backups)
         
         checkbutton_phasemod = ttk.Checkbutton(self.window_1, text = 'add 2PI to sam phase', variable = self.phasemod)
         
-        self.si_listbox.grid(column=0,row=0,columnspan=3)
+        self.si_listbox.grid(column=0,row=0,columnspan=7, sticky = 'w')
         button_select_sam.grid(column=0,row=1)
         button_select_ref.grid(column=1,row=1)
         button_select_echo.grid(column=2,row=1)
@@ -275,8 +278,8 @@ class study_index:
     def plot_selected(self):
         fig, ax = plt.subplots(1, 1, figsize = (16,9))
         self.canvas0.figure = fig
-        key_sam = self.name[self.si_idx_sam]
-        key_ref = self.name[self.si_idx_ref]
+        key_sam = self.fnames[self.si_idx_sam]
+        key_ref = self.fnames[self.si_idx_ref]
         ax.plot(self.t[key_sam], self.x[key_sam], label = 'sample')
         ax.plot(self.t[key_ref], self.x[key_ref], label = 'reference')
         ax.legend()
@@ -286,34 +289,34 @@ class study_index:
         # f_bot = self.f0.get()
         # self.x = dp.Basic_functions().weak_signal_remove(self.x)
         freq,sx = dp.Basic_functions().fftx_hilbert(self.x, self.t, 2)
-        freq_sam = freq[self.name[self.si_idx_sam]]
+        freq_sam = freq[self.fnames[self.si_idx_sam]]
         # freq_low = freq_sam[np.where(freq_sam <= 2)]
         # self.freq_sam = freq_sam
-        sx_sam = sx[self.name[self.si_idx_sam]]
+        sx_sam = sx[self.fnames[self.si_idx_sam]]
         # sx_sam = sx_sam[np.where(freq_sam <= 2)]
-        # freq_ref = freq[self.name[self.si_idx_ref]]
-        sx_ref = sx[self.name[self.si_idx_ref]]
+        # freq_ref = freq[self.fnames[self.si_idx_ref]]
+        sx_ref = sx[self.fnames[self.si_idx_ref]]
         # sx_ref = sx_ref[np.where(freq_sam <= 2)]
         if self.phasemod.get() == 0:
             if self.si_idx_echo == None:
-                freq_new, sx_sam_new, sx_ref_new, self.index, self.absorption, self.phi_sam, self.phi_ref = self.bf.getindex_array(freq_sam, sx_sam,
+                freq_new, sx_sam_new, sx_ref_new, self.index, self.absorption, self.phi_sam, self.phi_ref = self.getindex_array(freq_sam, sx_sam,
                                                                                                                  sx_ref,self.L.get())
             else:
-                # freq_echo = freq[self.name[self.si_idx_echo]]
-                sx_echo = sx[self.name[self.si_idx_echo]]
+                # freq_echo = freq[self.fnames[self.si_idx_echo]]
+                sx_echo = sx[self.fnames[self.si_idx_echo]]
                 sx_echo = sx_echo[np.where(freq_sam <= 2)]
-                freq_new, sx_sam_new, sx_ref_new, self.index, self.absorption, self.phi_sam, self.phi_ref = self.bf.getindex_array(freq_sam, sx_sam, 
+                freq_new, sx_sam_new, sx_ref_new, self.index, self.absorption, self.phi_sam, self.phi_ref = self.getindex_array(freq_sam, sx_sam, 
                                                                                                                  sx_ref, self.L.get(),
                                                                                                                  SX_echo=sx_echo)
         else:
             if self.si_idx_echo == None:
-                freq_new, sx_sam_new, sx_ref_new, self.index, self.absorption, self.phi_sam, self.phi_ref = self.bf.getindex_array(freq_sam, sx_sam,
+                freq_new, sx_sam_new, sx_ref_new, self.index, self.absorption, self.phi_sam, self.phi_ref = self.getindex_array(freq_sam, sx_sam,
                                                                                                                  sx_ref,self.L.get(), ph_mod = 2*pi)
             else:
-                # freq_echo = freq[self.name[self.si_idx_echo]]
-                sx_echo = sx[self.name[self.si_idx_echo]]
+                # freq_echo = freq[self.fnames[self.si_idx_echo]]
+                sx_echo = sx[self.fnames[self.si_idx_echo]]
                 sx_echo = sx_echo[np.where(freq_sam <= 2)]
-                freq_new, sx_sam_new, sx_ref_new, self.index, self.absorption, self.phi_sam, self.phi_ref = self.bf.getindex_array(freq_sam, sx_sam, 
+                freq_new, sx_sam_new, sx_ref_new, self.index, self.absorption, self.phi_sam, self.phi_ref = self.getindex_array(freq_sam, sx_sam, 
                                                                                                                  sx_ref, self.L.get(),
                                                                                                                  SX_echo=sx_echo, ph_mod = 2*pi)
         self.freq = freq_new
@@ -331,20 +334,147 @@ class study_index:
         # plot0.grid(1)
         # self.canvas0.draw()
         
-        self.freq_save[self.name[self.si_idx_sam]] = self.freq
-        self.optical_constants[self.name[self.si_idx_sam]+'_index'] = self.index
-        self.optical_constants[self.name[self.si_idx_sam]+'_absorb'] = self.absorption
-        # self.index_save[self.name[self.si_idx_sam]] = self.index
-        # self.absorption_save[self.name[self.si_idx_sam]] = self.absorption
+        self.freq_save[self.fnames[self.si_idx_sam]] = self.freq
+        self.optical_constants[self.fnames[self.si_idx_sam]+'_index'] = self.index
+        self.optical_constants[self.fnames[self.si_idx_sam]+'_absorb'] = self.absorption
+        
+        dp.Basic_functions.save_data(self.path, self.fnames[self.si_idx_sam]+'_index_1.dat', self.freq, self.index)
+        dp.Basic_functions.save_data(self.path, self.fnames[self.si_idx_sam]+'_absorption_1.dat', self.freq, self.absorption)
+        # self.index_save[self.fnames[self.si_idx_sam]] = self.index
+        # self.absorption_save[self.fnames[self.si_idx_sam]] = self.absorption
         
         self.si_action.set('computation complete')
+        
+        
+    def getindex_array(self,freq,sx_sam,sx_ref,L,sx_echo=None,c=3e8, ph_mod = None):
+        '''
+        Parameters
+        ----------
+        freq : np.array
+            DESCRIPTION.frequency of the spectrums
+        E_sam : 1d np.array
+            DESCRIPTION.sample spectrum
+        E_ref : 1d np.array
+            DESCRIPTION.reference spectrum
+        L : float
+            DESCRIPTION.initial guess of the sample thickness
+        E_echo : np.array, optional
+            DESCRIPTION. echo spectrum
+        c : float, optional
+            DESCRIPTION.speed of light, The default is 3e8.
+        Returns
+        -------
+        n : np.array
+            DESCRIPTION. calcullated refractive index
+        '''
+        
+        
+        
+        # E_sam = sx_sam
+        # E_ref = sx_ref
+        freq, E_sam, E_ref = self.badtrans_remove(freq, sx_sam, sx_ref)
+        # freq, E_sam, E_ref = self.FD_noise_remove(freq, sx_sam, sx_ref)
+        omega = freq*2*pi*1e12
+        
+        # self.freq  = freq
+        if sx_echo is None: #if there is no echo in the scan
+            
+            # self.phi = np.angle(E_sam/E_ref) #calculate phase of transmission
+            if ph_mod == None:
+                self.phi_sam = abs(np.unwrap(np.angle(E_sam), discont = pi/4))
+                self.phi_ref = abs(np.unwrap(np.angle(E_ref), discont = pi/4))
+
+            else:
+                self.phi_sam = abs(np.unwrap(np.angle(E_sam), discont = pi/4))
+                self.phi_ref = abs(np.unwrap(np.angle(E_ref), discont = pi/4))
+                self.phi_sam = self.phi_sam + ph_mod
+                # self.phi_ref += ph_mod
+            
+            self.phi = np.unwrap(self.phi_sam - self.phi_ref, discont = pi/4)
+            # self.phi = np.unwrap(self.phi, discont = pi/4)
+            # self.phi = abs(self.phi)
+            n = self.phi/omega/L*c+1 # calculate refractive index
+            # n = self.index_normal(freq, n)
+            
+        else:
+            freq, E_sam, E_ref= self.badtrans_remove(freq, sx_sam, sx_ref)
+            freq2, E_echo, E_ref2 = self.badtrans_remove(freq, sx_echo, sx_ref)
+            if ph_mod == None:
+                self.phi_sam = abs(np.unwrap(np.angle(E_sam), discont = pi/4))
+                self.phi_ref = abs(np.unwrap(np.angle(E_ref), discont = pi/4))
+
+            else:
+                self.phi_sam = abs(np.unwrap(np.angle(E_sam), discont = pi/4))
+                self.phi_ref = abs(np.unwrap(np.angle(E_ref), discont = pi/4))
+                self.phi_sam = self.phi_sam + ph_mod
+                # self.phi_ref += ph_mod
+            
+            self.Lr = np.linspace(0.8*L,1.2*L,1000) #create a range of estimated thickness
+            self.dn = np.zeros((len(self.freq),len(self.Lr))) #prepare dn to store the refractive index difference
+            # self.L0 = np.zeros(len(self.freq))
+            # self.dn_max = np.zeros(len(self.Lr))
+            # self.dn_min = np.zeros(len(self.Lr))
+            self.phi_sam = np.unwrap((np.angle(E_sam/E_ref)),discont=pi/4) # phase angle of transmission from sample signal
+            self.phi_echo = np.unwrap((np.angle(E_echo/E_ref)),discont=pi/4)#phase angle of transmission from echo signal
+            # self.phi_sam = (np.angle(E_sam/E_ref))
+            # self.phi_echo = (np.angle(E_echo/E_ref))
+            for i in range(0,len(self.Lr)):
+                self.n_sam = self.phi_sam/omega/self.Lr[i]*c+1  #refractive index calculated from sample signal
+                # self.n_sam = self.index_normal(self.n_sam)
+                self.n_echo = (self.phi_echo/omega/self.Lr[i]*c+1)/3 #refractive index calculated from echo signal
+                # self.n_echo = self.index_normal(self.n_echo)
+                self.dn[:,i] = self.n_echo-self.n_sam # difference of refractive index average over entire frequency range
+                # self.dn_max[i] = max(self.n_echo-self.n_sam)
+                # self.dn_min[i] = min(self.n_echo-self.n_sam)
+            self.L0 = self.find_1st_zero(self.Lr,self.dn) #get the true thickness by finding the zeros point
+            # self.L0 = L
+            n = self.phi_sam/omega/self.L0*c+1 #use the true thickness to calculate refractive index
+            # n = self.index_normal(n)
+            
+        a = -2/L*np.log(abs(E_sam)/abs(E_ref)*(1+n)**2/4/n)
+        # k = np.imag(n)
+        # a = -4*pi*freq*k/c
+        
+        return  freq, E_sam, E_ref, n, a, self.phi_sam, self.phi_ref
+    
+    def badtrans_remove(self, freq, E_sam, E_ref, freq_limit = 3):
+        idx_limit = np.where(freq <= freq_limit)[0][-1]
+        self.T = (abs(E_sam)/abs(E_ref))[0:idx_limit]
+        self.idxs = np.where(self.T >= 1)[0]
+        # T_max = max(self.T)
+        d0 = self.idxs[0] - 0
+        idx0 = 0
+        idx1 = self.idxs[0]
+        for i in range(0, len(self.idxs)-1):
+            d1 = self.idxs[i+1]-self.idxs[i]
+            if d1 >= d0:
+                idx0 = self.idxs[i] + 1
+                idx1 = self.idxs[i+1] - 1
+                d0 = d1
+        E_sam = E_sam[idx0:idx1]
+        E_ref = E_ref[idx0:idx1]      
+        freq = freq[idx0:idx1]
+        # E_sam_max = max(abs(E_sam))        
+        # for i, E in enumerate(E_sam):
+        #     if abs(E) <= 1e-5:
+        #         if i < len(E_sam)-i:
+        #             E_sam = E_sam[i:]
+        #             E_ref = E_ref[i:]
+        #             freq = freq[i:]
+        #         else:
+        #             E_sam = E_sam[0:i]
+        #             E_ref = E_ref[0:i]
+        #             freq = freq[0:i]
+
+        return freq, E_sam, E_ref
     
     
     def display(self):
-        # self.canvas0.figure,self.ax = plt.subplots(figsize=(15,8)) 
+        self.canvas0.figure,self.ax = plt.subplots(1,1,figsize=(15,8)) 
+        self.ax2 = self.ax.twinx()
         self.ax.cla()
         self.ax2.cla()
-        self.ax.plot(self.freq,self.index, color = 'red', label = self.name[self.si_idx_sam])
+        self.ax.plot(self.freq,self.index, color = 'red', label = self.fnames[self.si_idx_sam])
         self.ax.set_xlim(left=0,right=1.65)
         self.ax.set_xlabel('frequency (THz)',fontsize=15)
         self.ax.set_ylabel('refractive index',fontsize=15, color  = 'red')
@@ -358,11 +488,11 @@ class study_index:
         
         
     def save(self):
-        self.freq_save[self.name[self.si_idx_sam]] = self.freq
-        self.optical_constants[self.name[self.si_idx_sam]+'_index'] = self.index
-        self.optical_constants[self.name[self.si_idx_sam]+'_absorb'] = self.absorption
-        # self.index_save[self.name[self.si_idx_sam]] = self.index
-        # self.absorption_save[self.name[self.si_idx_sam]] = self.absorption
+        self.freq_save[self.fnames[self.si_idx_sam]] = self.freq
+        self.optical_constants[self.fnames[self.si_idx_sam]+'_index'] = self.index
+        self.optical_constants[self.fnames[self.si_idx_sam]+'_absorb'] = self.absorption
+        # self.index_save[self.fnames[self.si_idx_sam]] = self.index
+        # self.absorption_save[self.fnames[self.si_idx_sam]] = self.absorption
         self.si_action.set('result saved')
         
     # def plot_save(self):
@@ -403,7 +533,7 @@ class study_index:
         
         
     def build_echo_spec(self):
-        key_sam = self.name[self.si_idx_sam]
+        key_sam = self.fnames[self.si_idx_sam]
         t_points = self.choppoints_echo.get().split(',')
         p0 = float(t_points[0])
         p1 = float(t_points[1])
@@ -418,13 +548,13 @@ class study_index:
         
         self.x[key_echo] = np.concatenate((pad0, self.x[key_sam][idx0:idx1], pad1), axis = 0)
         self.t[key_echo] = self.t[key_sam]
-        self.name = list(self.x)
-        self.list.set(self.name)
+        self.fnames = list(self.x)
+        self.list.set(self.fnames)
         self.si_action.set('Echo spectrum built')
         
         
     def chop_ref_spec(self):
-        key = self.name[self.si_idx_ref]
+        key = self.fnames[self.si_idx_ref]
         t_points = self.choppoints_ref.get().split(',')
         p0 = round(float(t_points[0]), ndigits = 2)
         p1 = round(float(t_points[1]), ndigits = 2)
@@ -441,7 +571,7 @@ class study_index:
         self.si_action.set('reference spectrum chopped')
         
     def chop_sam_spec(self):
-        key = self.name[self.si_idx_sam]
+        key = self.fnames[self.si_idx_sam]
         t_points = self.choppoints_sam.get().split(',')
         
         p0 = round(float(t_points[0]), ndigits = 2)
@@ -462,8 +592,8 @@ class study_index:
         self.si_action.set('sample spectrum chopped')
         
     def pad_spec(self):
-        key_sam = self.name[self.si_idx_sam]
-        key_ref = self.name[self.si_idx_ref]
+        key_sam = self.fnames[self.si_idx_sam]
+        key_ref = self.fnames[self.si_idx_ref]
         t_sam = np.round(self.t[key_sam], 2)
         t_ref = np.round(self.t[key_ref], 2)
         # self.t_ref = t_ref
@@ -472,13 +602,16 @@ class study_index:
         # self.t_max = t_max
         t_min = min(t_sam[0], t_ref[0])
         if self.si_idx_echo != None:
-            key_echo = self.name[self.si_idx_echo]
+            key_echo = self.fnames[self.si_idx_echo]
             t_echo = np.round(self.t[key_echo], 2)
             t_max = max(t_max, t_echo[-1])
             t_min = min(t_min, t_echo[0])
         
         timestep = t_sam[1] - t_sam[0]
-        t_all = np.round(np.arange(t_min - 5, t_max + 5, step = timestep), 2)
+        
+        t_all = np.round(np.arange(t_min-5, t_max+5, step = timestep), 2)
+        
+        # pad = np.zeros(len(t_all)-len(t_sam))
         self.t[key_sam] = t_all
         self.t[key_ref] = t_all
         
@@ -527,122 +660,223 @@ class study_index:
         plot2.legend(loc='best')
        
         self.canvas0.draw()
+    
+    def pad_spec_simple(self):
+        key_sam = self.fnames[self.si_idx_sam]
+        key_ref = self.fnames[self.si_idx_ref]
+        t_sam = np.round(self.t[key_sam], 2)
+        t_ref = np.round(self.t[key_ref], 2)
+        t_min = t_ref[0]
+        t_max = t_sam[-1]
+        if self.si_idx_echo != None:
+            key_echo = self.fnames[self.si_idx_echo]
+            t_echo = np.round(self.t[key_echo])
+            t_max = t_echo[-1]
+            t_all = np.arange(t_min,t_max+0.05,step = 0.05)
+            self.t[key_sam] = t_all
+            self.t[key_ref] = t_all
+            self.t[key_echo] = t_all
+            pad0 = np.zeros(int((t_sam[0]-t_ref[0])/0.05))
+            pad1 = np.zeros(len(t_all)-len(t_sam)-len(pad0))
+            self.x[key_sam] = np.concatenate((pad0, self.x[key_sam], pad1), axis = 0)
+            pad2 = np.zeros(len(t_all)-len(t_ref))
+            self.x[key_ref] = np.concatenate((self.x[key_ref], pad2), axis = 0)
+            pad3 = np.zeros(len(t_all)-len(t_echo))
+            self.x[key_echo] = np.concatenate((pad3, self.x[key_echo]), axis = 0)
+        else:
+            t_all = np.arange(t_min,t_max+0.05,step = 0.05)
+            self.t[key_sam] = t_all
+            self.t[key_ref] = t_all
+            
+            pad0 = np.zeros(len(t_all)-len(t_sam))
+            self.x[key_sam] = np.concatenate((pad0, self.x[key_sam]), axis = 0)
+            pad1 = np.zeros(len(t_all)-len(t_ref))
+            self.x[key_ref] = np.concatenate((self.x[key_ref], pad1), axis = 0)
         
+        self.figure, self.ax = plt.subplots(3, 1, figsize = (16,9))
+        self.canvas0.figure = self.figure
+        plot1 = self.ax[0]
+        plot2 = self.ax[1]
+        plot3 = self.ax[2]
+        plot1.plot(self.t[key_sam] , self.x[key_sam],label = 'sample')
+        plot2.plot(self.t[key_ref] , self.x[key_ref],label = 'reference')
+        if self.si_idx_echo != None:
+            plot3.plot(self.t[key_echo], self.x[key_echo],label = 'echo')
+            plot3.set_xlabel('time (ps)')
+            plot3.set_ylabel('amplitude (V)')
+            plot3.legend(loc='best')
+        plot1.set_xlabel('time (ps)')
+        plot1.set_ylabel('amplitude (V)')
+        plot1.legend(loc='best')
+        plot2.set_xlabel('time (ps)')
+        plot2.set_ylabel('amplitude (V)')
+        plot2.legend(loc='best')
+       
+        self.canvas0.draw()
         
         
 class study_polarimetry:
-    def __init__(self,frame,t, x, y):
+    def __init__(self,frame,t, x, datapath = None):
+        self.path = datapath
         self.frame_po = frame
         self.t = copy.deepcopy(t)
         self.x = copy.deepcopy(x)
-        self.y = copy.deepcopy(y)
         self.freq_x, self.sx = dp.Basic_functions().fftx(self.x, self.t, 2)
-        self.freq_y, self.sy = dp.Basic_functions().fftx(self.y, self.t, 2)
         self.sx_abs = dp.Basic_functions().dict_getabs(self.sx)
-        self.sy_abs = dp.Basic_functions().dict_getabs(self.sy)
-        self.sxy = dp.Basic_functions().dict_total_field(self.sx_abs, self.sy_abs)
+
+        self.polarangle = dict()
+        self.ellipticity = dict()
+        self.polarangle_reduced = {}
+        self.ellipticity_reduced = {}
+        self.transmission = {}
+        self.transmission_normal = {}
+        self.freq_plot = {}
+        self.sort_keyword = tk.StringVar(value = 'T')
+        
+        '''first window for polarimetry calculation'''
+        
+        #variables
+        self.fnames = list(x)
+        self.list_name = tk.StringVar(value=self.fnames)
+        self.selection_sam = tk.StringVar(value='Selected sample spectrums: \n')
+        self.selection_ref = tk.StringVar(value='Selected reference spectrums: \n')
+        self.action = tk.StringVar(value='ready')
+        
+        
+        # mainwindow
         self.window1 = ttk.Labelframe(self.frame_po,text='main')
         self.window1.grid(column=0,row=0)
         self.choppoints_sam = tk.StringVar(value = '0,0')
         self.choppoints_ref = tk.StringVar(value = '0,0')
         
         
-        self.name = list(x)
-        self.list_name = tk.StringVar(value=self.name)
-        self.selection_sam = tk.StringVar(value='Selected sample spectrums: \n')
-        self.selection_ref = tk.StringVar(value='Selected reference spectrums: \n')
-        self.action = tk.StringVar(value='ready')
+        # widges
         self.listbox= tk.Listbox(self.window1,listvariable = self.list_name,selectmode='extended', width = 50)
-        label_select_sam = ttk.Label(self.window1,textvariable=self.selection_sam)
-        label_select_ref = ttk.Label(self.window1,textvariable=self.selection_ref)
-        button_select_sam = ttk.Button(self.window1,text='use selection as sample',command=self.select_sam)
-        button_select_ref = ttk.Button(self.window1,text='use selection as reference',command=self.select_ref)
-        button_calculate = ttk.Button(self.window1,text='calculate transmission',command=self.calculate_transmission)
-        button_calculate_polarimetry = ttk.Button(self.window1,text='calculate polarimetry',command=self.calculate_polarimetry)
-        button_select_combine_ref = ttk.Button(self.window1,text='select and combine',command=self.combine_select_ref)
+        button_sortlist = ttk.Button(self.window1,text='sort x and y lists', command = self.sort_input_list)
+        cbox_sort_keyword = ttk.Combobox(self.window1, textvariable = self.sort_keyword, width = 10)
+        cbox_sort_keyword['value'] = ['K', 'T']
+        label_select_sam = ttk.Label(self.window1,textvariable = self.selection_sam)
+        label_select_ref = ttk.Label(self.window1,textvariable = self.selection_ref)
+        
+        button_auto_select = ttk.Button(self.window1, text = 'auto select spec', command = self.autoselect)
+        button_select_sam = ttk.Button(self.window1,text = 'use selection as +45',command=self.select_sam)
+        button_select_ref = ttk.Button(self.window1,text = 'use selection as -45',command=self.select_ref)
+        # button_calculate_transmission = ttk.Button(self.window1,text='calculate transmission',command=self.calculate_transmission)
+        button_calculate_polarimetry = ttk.Button(self.window1,text='calculate polarimetry',
+                                                  command = self.calculate_polarimetry)
         button_show_selected = ttk.Button(self.window1, text = 'show selected', command = self.plot_selected)
-        button_checktrans = ttk.Button(self.window1,text='check result',command=self.checktrans)
+        button_checktrans = ttk.Button(self.window1,text='show transmission',command=self.checktrans)
         button_show_polarangle = ttk.Button(self.window1,text='show polarangle',command=self.show_polarangle)
         button_show_ellipticity = ttk.Button(self.window1,text='show ellipticity',command=self.show_ellipticity)
+        button_show_polarangle_re = ttk.Button(self.window1,text='show reduced polarangle',command=self.show_polarangle_reduced)
+        button_show_ellipticity_re = ttk.Button(self.window1,text='show reduced ellipticity',command=self.show_ellipticity_reduced)
+        
+        
         label_status = ttk.Label(self.window1,text='status: ')
         label_action = ttk.Label(self.window1,textvariable=self.action)
         
         
         self.listbox.grid(column=0,row=0,columnspan=2)
-        label_select_sam.grid(column=2,row=0,columnspan=2)
-        label_select_ref.grid(column=4,row=0,columnspan=2)
-        button_select_sam.grid(column=0,row=1)
-        button_select_ref.grid(column=1,row=1)
-        button_select_combine_ref.grid(column=3,row=1)
-        button_show_selected.grid(column = 4, row = 1, sticky = 'w')
-        button_calculate.grid(column=4,row=2)
-        button_calculate_polarimetry.grid(column=2,row=2)
-        button_show_polarangle.grid(column=1,row=3)
-        button_checktrans.grid(column=0,row=3)
-        button_show_ellipticity.grid(column=2,row=3)
-        label_status.grid(column=0,row=4)
-        label_action.grid(column=1,row=4)
+        label_select_sam.grid(column=2,row=0,columnspan=2, sticky = 'nw')
+        label_select_ref.grid(column=4,row=0,columnspan=2, sticky = 'nw')
+        
+        cbox_sort_keyword.grid(column = 0, row = 1, sticky = 'w')
+        button_sortlist.grid(column = 1, row = 1, sticky = 'w')
+        button_select_sam.grid(column = 2,row = 1, sticky = 'w')
+        button_select_ref.grid(column = 3,row = 1, sticky = 'w')
+        button_auto_select.grid(column = 4, row = 1,sticky = 'w')
+        button_show_selected.grid(column = 5, row = 1, sticky = 'w')
+        button_calculate_polarimetry.grid(column=0,row=2)
+        # button_calculate_transmission.grid(column=1,row=2)
+        button_show_polarangle.grid(column = 0, row = 3, sticky = 'w')
+        button_checktrans.grid(column = 1 ,row = 3, sticky = 'w')
+        button_show_ellipticity.grid(column = 2, row = 3, sticky = 'w')
+        button_show_polarangle_re.grid(column = 0, row = 4)
+        button_show_ellipticity_re.grid(column = 1, row = 4)
         
         
-        self.window2 = ttk.Labelframe(self.frame_po, text='Edit Spectrums')
-        self.window2.grid(column = 0, row = 1, sticky='w')
         
-        label_choppoints_sam = ttk.Label(self.window2, text='Enter time points to chop sample (start, stop): ')
-        entry_choppoints_sam = ttk.Entry(self.window2, textvariable = self.choppoints_sam, width=10)
-        label_choppoints_ref = ttk.Label(self.window2, text='Enter time points to chop ref (start, stop): ')
-        entry_choppoints_ref = ttk.Entry(self.window2, textvariable = self.choppoints_ref, width=10)
-        button_chop = ttk.Button(self.window2, text = 'chop specs', command = self.spec_chop)
+        label_status.grid(column = 0, row = 5, sticky = 'w')
+        label_action.grid(column = 1, row = 5, sticky = 'w')
         
-        label_choppoints_sam.grid(column = 0, row = 0, sticky = 'w')
-        entry_choppoints_sam.grid(column = 1, row = 0, sticky = 'w')
-        label_choppoints_ref.grid(column = 2, row = 0, sticky = 'w')
-        entry_choppoints_ref.grid(column = 3, row = 0, sticky = 'w')
-        button_chop.grid(column = 0, row = 1, sticky = 'w')
+        
+        # self.window2 = ttk.Labelframe(self.frame_po, text='Edit Spectrums')
+        # self.window2.grid(column = 0, row = 1, sticky='w')
+        
+        # label_choppoints_sam = ttk.Label(self.window2, text='Enter time points to chop sample (start, stop): ')
+        # entry_choppoints_sam = ttk.Entry(self.window2, textvariable = self.choppoints_sam, width=10)
+        # label_choppoints_ref = ttk.Label(self.window2, text='Enter time points to chop ref (start, stop): ')
+        # entry_choppoints_ref = ttk.Entry(self.window2, textvariable = self.choppoints_ref, width=10)
+        # button_chop = ttk.Button(self.window2, text = 'chop specs', command = self.spec_chop)
+        
+        # label_choppoints_sam.grid(column = 0, row = 0, sticky = 'w')
+        # entry_choppoints_sam.grid(column = 1, row = 0, sticky = 'w')
+        # label_choppoints_ref.grid(column = 2, row = 0, sticky = 'w')
+        # entry_choppoints_ref.grid(column = 3, row = 0, sticky = 'w')
+        # button_chop.grid(column = 0, row = 1, sticky = 'w')
 
-        self.window3 = ttk.LabelFrame(self.frame_po,text='plot')
-        self.window3.grid(column = 1,row = 0,sticky='w')
-        self.fig, self.ax = plt.subplots(2,2,figsize=(16,9))
-        self.canvas0 = FigureCanvasTkAgg(figure = self.fig, master = self.window3)
-        self.canvas0.get_tk_widget().grid(column=0,row=0,columnspan=6,rowspan=6,sticky='w')
-        self.canvas0.draw()
+        # self.window3 = ttk.LabelFrame(self.frame_po,text='plot')
+        # self.window3.grid(column = 1,row = 0,sticky='w')
+        # self.fig, self.ax = plt.subplots(2,2,figsize=(16,9))
+        # self.canvas0 = FigureCanvasTkAgg(figure = self.fig, master = self.window3)
+        # self.canvas0.get_tk_widget().grid(column=0,row=0,columnspan=6,rowspan=6,sticky='w')
+        # self.canvas0.draw()
         
-        button_clear_plot = ttk.Button(self.window3, text = 'clear', command = self.plot_clear)
+        # button_clear_plot = ttk.Button(self.window3, text = 'clear', command = self.plot_clear)
         
-        button_clear_plot.grid(column = 0, row = 7)
+        # button_clear_plot.grid(column = 0, row = 7)
         
         self.window4 = ttk.Labelframe(self.frame_po, text = 'status')
         self.window4.grid(column = 0, row = 2)
         
         
+    def autoselect(self):
+        idx_sam = []
+        idx_ref = []
+        for i, name in enumerate(self.fnames):
+            if 'p135' in name:
+                idx_sam.append(i)
+            if 'p45' in name:
+                idx_ref.append(i)
+        self.idx_sam = idx_sam
+        self.idx_ref = idx_ref
+        for i in self.idx_sam:
+            self.selection_sam.set(self.selection_sam.get()+self.fnames[i]+'\n')
+        for i in self.idx_ref:
+            self.selection_ref.set(self.selection_ref.get()+self.fnames[i]+'\n')
+        self.action.set('+45 and -45 spectrums selected')
+        
+                
+        
         
     def select_sam(self):
         self.idx_sam = self.listbox.curselection()
-        self.selection_sam.set('Selected sample spectrums: \n')
+        self.selection_sam.set('+45 deg spectrums: \n')
         for i in self.idx_sam:
-            self.selection_sam.set(self.selection_sam.get()+self.name[i]+'\n')
-        self.freq_plot = {}
-        for i in self.idx_sam:
-            key = self.name[i]
-            self.freq_plot[key] = self.freq_x[key]
-        self.action.set('sample scans selected')
+            self.selection_sam.set(self.selection_sam.get()+self.fnames[i]+'\n')
+        
+        # for i in self.idx_sam:
+        #     key = self.fnames[i]
+        #     self.freq_plot[key] = self.freq_x[key]
+        self.action.set('+45 deg scans selected')
         
     def select_ref(self):
         self.idx_ref = self.listbox.curselection()
-        self.selection_ref.set('Selected reference spectrums: \n')
+        self.selection_ref.set('-45 deg spectrums: \n')
         for i in self.idx_ref:
-            self.selection_ref.set(self.selection_ref.get()+self.name[i]+'\n')
-        self.action.set('reference scans selected')
+            self.selection_ref.set(self.selection_ref.get()+self.fnames[i]+'\n')
+        self.action.set('-45 deg scans selected')
     
     def plot_selected(self):
         for axes1, axes2 in self.ax:
             axes1.cla()
             axes2.cla()
         for i in self.idx_sam:
-            key_sam = self.name[i]
+            key_sam = self.fnames[i]
             self.ax[0,0].plot(self.t[key_sam], self.x[key_sam], label = key_sam + '_x')
             self.ax[0,1].plot(self.t[key_sam], self.y[key_sam], label = key_sam + '_y')
         for j in self.idx_ref:
-            key_ref = self.name[j]
+            key_ref = self.fnames[j]
             self.ax[1,0].plot(self.t[key_ref], self.x[key_ref], label = key_ref + '_x')
             self.ax[1,1].plot(self.t[key_ref], self.y[key_ref], label = key_ref + '_y')
         self.ax[0,0].legend(loc= 'best')
@@ -657,24 +891,33 @@ class study_polarimetry:
             axes1.cla()
             axes2.cla()
         self.canvas0.draw()
+        
+    def sort_input_list(self):
+        if self.sort_keyword.get() == 'K':
+            self.fnames.sort(key = bf.dict_key_get_T)
+            self.list_name.set(self.fnames)
+        if self.sort_keyword.get() == 'T':
+            self.fnames.sort(key = bf.dict_key_get_B)
+            self.list_name.set(self.fnames)
+            
     # def calculate_transmission(self):
     #     self.transmission_x = dict()
     #     self.transmission_y = dict()
     #     if len(self.idx_sam) == len(self.idx_ref) and len(self.idx_ref) != 1:
     #         for i in self.idx_sam:
     #             for j in self.idx_ref:
-    #                 if self.name[i] in list(self.sy):
-    #                     self.transmission_x[self.name[i]] = abs(self.sx[self.name[i]])/abs(self.sx[self.name[j]])
-    #                     self.transmission_y[self.name[i]] = abs(self.sy[self.name[i]])/abs(self.sy[self.name[j]])
+    #                 if self.fnames[i] in list(self.sy):
+    #                     self.transmission_x[self.fnames[i]] = abs(self.sx[self.fnames[i]])/abs(self.sx[self.fnames[j]])
+    #                     self.transmission_y[self.fnames[i]] = abs(self.sy[self.fnames[i]])/abs(self.sy[self.fnames[j]])
     #     if len(self.idx_ref) == 1:
     #         for i in self.idx_sam:
-    #             self.transmission_x[self.name[i]] = abs(self.sx[self.name[i]])/abs(self.sx[self.name[self.idx_ref[0]]])
-    #             self.transmission_y[self.name[i]] = abs(self.sy[self.name[i]])/abs(self.sy[self.name[self.idx_ref[0]]])
+    #             self.transmission_x[self.fnames[i]] = abs(self.sx[self.fnames[i]])/abs(self.sx[self.fnames[self.idx_ref[0]]])
+    #             self.transmission_y[self.fnames[i]] = abs(self.sy[self.fnames[i]])/abs(self.sy[self.fnames[self.idx_ref[0]]])
     #     self.action.set('transmission calculated')
      
     def spec_chop(self):
         for i in self.idx_sam:
-            key_sam = self.name[i]
+            key_sam = self.fnames[i]
             t_points_sam = self.choppoints_sam.get().split(',')
             p0_sam = round(float(t_points_sam[0]), ndigits = 2)
             p1_sam = round(float(t_points_sam[1]), ndigits = 2)
@@ -689,7 +932,7 @@ class study_polarimetry:
             # self.t[key] = self.t[key][idx0:idx1]
             
         for j in self.idx_ref:
-            key_ref = self.name[j]
+            key_ref = self.fnames[j]
             t_points_ref = self.choppoints_ref.get().split(',')
             p0_ref = round(float(t_points_ref[0]), ndigits = 2)
             p1_ref = round(float(t_points_ref[1]), ndigits = 2)
@@ -700,47 +943,107 @@ class study_polarimetry:
                 self.y[key_ref] = dp.Basic_functions().array_chop_pad(self.t[key_ref], self.y[key_ref], p0_ref, p1_ref)
                 self.action.set('sample and reference spectrum chopped')
         
-    def calculate_transmission(self):
-        self.transmission_x = dict()
-        self.transmission_y = dict()
-        self.transmission = {}
-        if len(self.idx_sam) == len(self.idx_ref):
-            for i, j in zip(self.idx_sam, self.idx_ref):
-                self.transmission_x[self.name[i]] = abs(self.sx[self.name[i]])/abs(self.sx[self.name[j]])
-                self.transmission_y[self.name[i]] = abs(self.sy[self.name[i]])/abs(self.sy[self.name[j]]) 
-                self.transmission[self.name[i]] = np.sqrt(self.transmission_x[self.name[i]]**2 + self.transmission_y[self.name[j]]**2)
-        else:
-            if len(self.idx_sam) < len(self.idx_ref) and 2*len(self.idx_sam) > len(self.idx_ref):  
-                for i, value in enumerate(self.idx_sam):
-                    key_sam = self.name[value]
-                    key_ref1 = self.name[self.idx_ref[i]]
-                    key_ref2 = self.name[self.idx_ref[i+1]]
-                    self.transmission_x[key_sam] = abs(self.sx[key_sam])/abs((self.sx[key_ref1]+self.sx[key_ref2])/2)
-                    self.transmission_y[key_sam] = abs(self.sy[key_sam])/abs((self.sy[key_ref1]+self.sy[key_ref2])/2)
-                    self.transmission[key_sam] = np.sqrt(self.transmission_x[key_sam]**2 + self.transmission_y[key_sam]**2)
-        self.action.set('transmission calculated')
+    # def calculate_transmission(self):
+    #     self.transmission_x = dict()
+    #     self.transmission_y = dict()
+    #     self.transmission = {}
+    #     if len(self.idx_sam) == len(self.idx_ref):
+    #         for i, j in zip(self.idx_sam, self.idx_ref):
+    #             self.transmission_x[self.fnames[i]] = abs(self.sx[self.fnames[i]])/abs(self.sx[self.fnames[j]])
+    #             self.transmission_y[self.fnames[i]] = abs(self.sy[self.fnames[i]])/abs(self.sy[self.fnames[j]]) 
+    #             self.transmission[self.fnames[i]] = np.sqrt(self.transmission_x[self.fnames[i]]**2 + self.transmission_y[self.fnames[j]]**2)
+    #     else:
+    #         if len(self.idx_sam) < len(self.idx_ref) and 2*len(self.idx_sam) > len(self.idx_ref):  
+    #             for i, value in enumerate(self.idx_sam):
+    #                 key_sam = self.fnames[value]
+    #                 key_ref1 = self.fnames[self.idx_ref[i]]
+    #                 key_ref2 = self.fnames[self.idx_ref[i+1]]
+    #                 self.transmission_x[key_sam] = abs(self.sx[key_sam])/abs((self.sx[key_ref1]+self.sx[key_ref2])/2)
+    #                 self.transmission_y[key_sam] = abs(self.sy[key_sam])/abs((self.sy[key_ref1]+self.sy[key_ref2])/2)
+    #                 self.transmission[key_sam] = np.sqrt(self.transmission_x[key_sam]**2 + self.transmission_y[key_sam]**2)
+    #     self.action.set('transmission calculated')
         
-    def calculate_polarimetry(self):
-        self.polarangle = dict()
-        self.ellipticity = dict()
-        for i in self.idx_sam:
-            Ecra = self.sx[self.name[i]]+1j*self.sy[self.name[i]]
-            Ecri = self.sx[self.name[i]]-1j*self.sy[self.name[i]]
-            self.ellipticity[self.name[i]] = (abs(Ecri)-abs(Ecra))/(abs(Ecri)+abs(Ecra))
-            self.polarangle[self.name[i]] = (np.unwrap(np.angle(Ecra))-np.unwrap(np.angle(Ecri)))/2
+    def calculate_polarimetry(self):  
+        for i,j in zip(self.idx_sam, self.idx_ref):
+            Ex = (self.sx[self.fnames[i]]-self.sx[self.fnames[j]])/np.sqrt(2)
+            Ey = (self.sx[self.fnames[i]]+self.sx[self.fnames[j]])/np.sqrt(2)
+            key_save = dp.Basic_functions().find_str_common(self.fnames[i], self.fnames[j])
+            self.freq_plot[key_save] = self.freq_x[self.fnames[i]]
+            Ecra = Ex+1j*Ey
+            Ecri = Ex-1j*Ey
+            self.transmission[key_save] = np.sqrt(abs(Ex)**2 + abs(Ey)**2)
+            self.ellipticity[key_save] = (abs(Ecri)-abs(Ecra))/(abs(Ecri)+abs(Ecra))
+            self.polarangle[key_save] = ((np.unwrap(np.angle(Ecra))-np.unwrap(np.angle(Ecri)))/2)/2/pi*360
+        self.polarangle_phase_adjust()
         
+        key0 = list(self.transmission)[0]
+        for i, key in enumerate(list(self.transmission)):
+            if i == 0:
+                trans_0T = self.transmission[key]
+            else:
+                self.transmission_normal[key] = self.transmission[key]/trans_0T
+        for key1, key in zip(list(self.freq_plot), list(self.polarangle)):
+            fname_save = self.path + 'ellip'+key1 + '_1.dat'
+            self.polarangle_reduced[key] = self.polarangle[key] - self.polarangle[key0]
+            self.ellipticity_reduced[key] = self.ellipticity[key] - self.ellipticity[key0]
+            ellip_save = np.stack((self.freq_plot[key1], self.ellipticity_reduced[key]), axis = 1)
+            np.savetxt(fname_save, ellip_save)
+        self.action.set('polarimetry calculated')
+    
+        
+    def polarangle_phase_adjust(self):
+        key = list(self.freq_plot)[0]
+        idx0 = np.where(self.freq_plot[key]>0.1)[0][0]
+        idx1 = np.where(self.freq_plot[key]<1.2)[0][-1]
+        for i, key in enumerate(list(self.polarangle)):
+            if i == 0:
+                mean0 = np.mean(self.polarangle[key][idx0:idx1])
+                while mean0 <= 0:
+                    self.polarangle[key] = self.polarangle[key] + 180
+                    mean0 = np.mean(self.polarangle[key][idx0:idx1])
+            else:
+                mean1 = np.mean(self.polarangle[key][idx0:idx1])
+                # self.polarangle[key] = self.polarangle[key] - (mean1-mean0)
                 
+                while mean1 - mean0 >= 150:
+                    self.polarangle[key] = self.polarangle[key] - 180
+                    mean1 = np.mean(self.polarangle[key][idx0:idx1])
+                while mean1 - mean0 <= -150:
+                    self.polarangle[key] = self.polarangle[key] + 180
+                    mean1 = np.mean(self.polarangle[key][idx0:idx1])
+    
+            
+        
+    def show_polarangle_reduced(self):
+        newwindow = tk.Toplevel()
+        pt.Plottool(newwindow, self.freq_plot, self.polarangle_reduced)
+    
     def combine_select_ref(self):
         self.idx_ref = self.listbox_datas.curselection()
         for i in self.idx_ref:
-            self.sxref[self.name_ref[i]] = (self.sxref[self.name_ref[i]] + self.sxref[self.name_ref[i+1]])/2
+            self.sxref[self.fnames_ref[i]] = (self.sxref[self.fnames_ref[i]] + self.sxref[self.fnames_ref[i+1]])/2
         self.action.set('reference combined')
             
     def checktrans(self):
         self.new_window = tk.Toplevel()
-        pt.Plottool(self.new_window, self.freq_plot, self.transmission)
+        pt.Plottool(self.new_window, self.freq_plot, self.transmission_normal)
         
     def show_polarangle(self):
-        pt.Plottool(self.window2, self.freq, self.polarangle)
+        newwindow = tk.Toplevel()
+        pt.Plottool(newwindow, self.freq_plot, self.polarangle)
+    def show_ellipticity_reduced(self):
+        newwindow = tk.Toplevel()
+        pt.Plottool(newwindow, self.freq_plot, self.ellipticity_reduced)
     def show_ellipticity(self):
-        pt.Plottool(self.window3, self.freq, self.ellipticity)
+        newwindow = tk.Toplevel()
+        pt.Plottool(newwindow, self.freq_plot, self.ellipticity)
+        
+        
+# if __name__ == '__main__':
+#     t = np
+#     y = x**2
+#     root=tk.Tk()
+#     mainframe = ttk.Frame(root)
+#     mainframe.grid(column = 0, row = 0)
+#     pt=Plottool(mainframe, x, y)
+#     root.mainloop()

@@ -15,6 +15,11 @@ import re
 # from numba import njit, jit
 from scipy.integrate import simps
 from numpy.fft import fft
+import tkinter as tk
+from tkinter import ttk
+import os
+from copy import deepcopy
+    
 
 
 def get_fnames(path, filetype='.dat'):
@@ -47,6 +52,8 @@ def load_single_spec(folder, fname, ftype = '.dat'):
             data = np.loadtxt(folder+'/'+fname+'_'+fnum+ftype)
         except OSError:
             continue
+        except ValueError:
+            data = np.loadtxt(folder+'/'+fname+'_'+fnum+ftype, dtype = complex)
         else:
             data = np.loadtxt(folder+'/'+fname+'_'+fnum+ftype)
             if i == 0:
@@ -56,23 +63,45 @@ def load_single_spec(folder, fname, ftype = '.dat'):
                     y_store = data[:, 2]
                 except:
                     dim_y = 0
+                    y_store = np.zeros_like(t_store)
                 else:
                     y_store = data[:, 2]
             else:
                 if dim_y == 0:
                     t_new = data[:, 0]
                     x_new = data[:, 1]
-                    t_store = np.colume_stack((t_new, t_store))
-                    x_store = np.column_stack((x_new, x_store))
+                    y_new = np.zeros_like(t_new)
+                    t_store = np.colume_stack((t_store, t_new))
+                    x_store = np.column_stack((x_store, x_new))
+                    y_store = np.column_stack((y_store, y_new))
                 else:
                     t_new = data[:, 0]
                     x_new = data[:, 1]
                     y_new = data[:, 2]
-                    t_store = np.column_stack((t_new, t_store))
-                    x_store = np.column_stack((x_new, x_store))
-                    y_store = np.column_stack((y_new, y_store))
+                    t_store = np.column_stack((t_store, t_new))
+                    x_store = np.column_stack((x_store, x_new))
+                    y_store = np.column_stack((y_store, y_new))
     return t_store, x_store, y_store
 
+def save_data(path, fname, t, x, y = None):
+    if os.path.exists(path):
+        pass
+    else:
+        os.makedirs(path)
+    if y is None:
+        if len(t) == len(x):
+            y = np.zeros_like(t)
+            spec = np.stack((t,x,y), axis = 1)
+            np.savetxt(path+fname, spec)
+        else:
+            raise Exception('dimension of time and amplitude does not match')
+    else:
+        if len(t) == len(x) and len(t) == len(y):
+            spec = np.stack((t,x,y), axis = 1)
+            np.savetxt(path+fname, spec)
+        else:
+            raise Exception('Dimension of time and amplitude does not match')
+            
 def str_get_D(string):
     str_seg_all = string.split('_')
     pick_str = ''
@@ -193,7 +222,7 @@ def array_ave_samref(x, t, nsam, nref):
     samx_sum = 0
     refx_sum = 0
     n_cycle = round(np.size(x, axis = 1)/(nsam+nref))
-    for i in range(np.size(x, axis=1)):
+    for i in range(0, np.size(x, axis=1)):
         if i % (nsam+nref) < nsam:
             samx_sum = x[:,i] + samx_sum
         else:
@@ -206,15 +235,19 @@ def array_ave_samref(x, t, nsam, nref):
     comp2 = samx-refx
     return samx,samt,refx,reft,comp1,comp2
 
-def array_cal_J_polar(t, E1x, E1y, E2x, E2y):
+def array_cal_J_polar(t, E1x, E1y, E2x, E2y, t_cen = None):
     if len(t) == len(E1x):
         if len(E1x) == len(E2x):
             tw_len = []
             J = []
-            idx0 = int(np.floor(len(E1x)/2))
-            idx1 = idx0 + 1
+            if t_cen == None:
+                idx0 = int(np.floor(len(E1x)/2))
+                idx1 = idx0 + 1
+            else:
+                idx0 = np.where(t<=t_cen)[0][-1]
+                idx1 = idx0 + 1
             while idx0 >= 0 and idx1 <= len(E1x)-1:
-                tw_len.append(abs(t[idx1]-t[idx0]))
+                tw_len.append(abs(t[idx1]-t[idx0])/2)
                 E1x_w = E1x[idx0:idx1]
                 E1y_w = E1y[idx0:idx1]
                 E2x_w = E2x[idx0:idx1]
@@ -229,7 +262,58 @@ def array_cal_J_polar(t, E1x, E1y, E2x, E2y):
     return np.array(tw_len), np.array(J)
     
         
+def FaradayRotate(freq,B):
+    '''
     
+
+    Parameters
+    ----------
+    freq : 1d array
+        DESCRIPTION. frequency domain obtained from Fourier transform input waves
+    B : TYPE float64
+        DESCRIPTION. External magnetic field strength in T
+
+    Returns
+    -------
+    T_x : 1d array
+        DESCRIPTION. complex transmission coefficient in x direction
+    T_y : 1d array
+        DESCRIPTION. complex transmission coefficient in y direction
+
+    '''
+    d=5*1e-4 #sample thickness
+    w=2*pi*freq*1e12 #angular frequency 
+    #set parameters for calculation
+    n_air=1 # index of air
+    e=1.6e-19 #electron charge
+    c=3e8 # speed of light
+    v_e=0.86*1e12 # electron scattering rate
+    m_e=0.018*9.1e-31 # mass of electron
+    w_t=2*pi*5.90e12 # transverse phonon frequency
+    w_l=2*pi*5.54e12 # longitudinal phonon frequency
+    epi_b=13.82 # background permittivity
+    w_ce=e*B/(m_e) # cyclotron frequency
+    w_e=0.28*2*pi*1e12*np.sqrt(epi_b) #plasma frequency is set to constant 0.28
+    # w_h=(4*pi*Nh*e^2/m_h*1);
+    v_ph=2*pi*1e12 # phonon damping rate
+ 
+   
+    epi_ph = epi_b*((w_t**2-w_l**2)/(w_t**2-w**2-1j*v_ph*w))
+
+    ncra=np.sqrt(epi_b-w_e**2/(w*(w+1j*v_e-w_ce))+epi_ph)
+    ncri=np.sqrt(epi_b-w_e**2/(w*(w+1j*v_e+w_ce))+epi_ph)
+
+    t_cra_as=2*n_air/(n_air+ncra) #calculate Fresnel transmission coefficient
+    t_cra_sa=2*ncra/(n_air+ncra)
+    t_cri_as=2*n_air/(n_air+ncri)
+    t_cri_sa=2*ncri/(n_air+ncri)
+    # calculate complex transmission coefficents
+    T_cra =t_cra_as*t_cra_sa*np.exp(1j*(ncra-1)*w*d/c)
+    T_cri =(t_cri_as*t_cri_sa*np.exp(1j*(ncri-1)*w*d/c))
+    T_x = (T_cra+T_cri)/np.sqrt(2)
+    T_y = (T_cra-T_cri)/np.sqrt(2)/1j
+        
+    return T_x, T_y
 
 
 def fftx(t, x, pad=2):
@@ -315,6 +399,29 @@ def spec_shift(t, x, t_shift):
     if t_shift < 0:
         x_new = np.concatenate((x[move:], np.zeros(move)))
     return x_new
+
+def field_remove_nan(x):
+    x = np.nan_to_num(x)
+    for i,data in enumerate(x):
+        if data == 0:
+            if i+1<=len(x)-1:
+                x[i] = x[i+1]
+            else:
+                x[i] = x[i-1]
+    return x
+
+def dict_normalize(x):
+    x_in = deepcopy(x)
+    x_out = {}
+    if type(x) is dict:
+        for key in list(x_in):
+            x_max = max(x[key])
+            x_normal = x[key]/x_max
+            x_out[key] = x_normal
+    else:
+        raise Exception('Input is not a dictionary')
+    return x_out
+            
     
     
 

@@ -15,10 +15,11 @@ from scipy.optimize import curve_fit
 from scipy.optimize import Bounds
 from inspect import signature
 import dataprocessor as dp
-import plottool_v5 as pt5
+import plottool_v6 as pt5
+import Fast_data_process as fdp
 import configparser as cfp
-
-
+from select_folder import select_folder
+import glob
 
 class Curvefit:
     def __init__(self, root, xvalues,yvalues):
@@ -80,8 +81,8 @@ class Curvefit:
         checkbutton_autoxlim.grid(column=5,row=0)
         label_funchoice.grid(column=0,row=1)
         combox_functions.grid(column=1,row=1,columnspan=2)
-        label_funchoice_2.grid(column = 2, row = 1, sticky = 'w')
-        combox_functions_2.grid(column = 3, row = 1, columnspan = 2, sticky = 'w')
+        label_funchoice_2.grid(column = 3, row = 1, sticky = 'w')
+        combox_functions_2.grid(column = 4, row = 1, columnspan = 2, sticky = 'w')
         button_fit.grid(column=0, row=2)
         button_manfit.grid(column = 1, row = 2, sticky = 'w')
         checkbutton_grid.grid(column=2, row=2)
@@ -260,6 +261,24 @@ class Curvefit:
         self.y_fit_save[self.names_x[self.idx_selectx[0]]] = self.y_fit
         self.para_fit_save[self.names_x[self.idx_selectx[0]]] = self.para_fit
         self.action.set('fit saved')    
+        
+        
+    def get_fit_boundary(self):
+        if  self.para_lb.get() == '':
+            p_lim_low = 0.1*np.array([self.a.get(), self.b.get(), self.c.get(),self.d.get()])
+        else:
+            p_lim_low = []
+            for plim in self.para_lb.get().split(','):
+                p_lim_low.append(float(plim))
+            p_lim_low = np.array(p_lim_low)
+        if  self.para_ub.get() == '':
+            p_lim_high = 5*np.array([self.a.get(), self.b.get(), self.c.get(),self.d.get()])
+        else:
+            p_lim_high = []
+            for plim in self.para_ub.get().split(','):
+                p_lim_high.append(float(plim))
+            p_lim_high = np.array(p_lim_high)
+        return p_lim_low, p_lim_high
         
     def fitcurve(self):
         self.canvas0.figure = Figure(figsize=(12,6))
@@ -456,11 +475,24 @@ class Curvefit:
         #     plot0.plot(self.x_new,self.y_fit,label='fitted cosine')  
             
         if self.fun_choice.get() == 'InSb trans':
-            self.p_init = np.array([self.a.get(), self.b.get()])
-            self.para_fit = curve_fit(self.InSb_trans,self.x_new,self.y_new,p0=self.p_init)[0]
+            self.p_init = np.array([self.a.get(), self.b.get(), self.c.get(),self.d.get()])
+            self.p_lb, self.p_ub = self.get_fit_boundary()
+            self.para_fit = curve_fit(self.InSb_trans,self.x_new,self.y_new,
+                                      p0=self.p_init, 
+                                      bounds = (self.p_lb, self.p_ub)
+                                     )[0]
             self.a_fitvalue.set(str(self.para_fit[0])+'  ')
             self.b_fitvalue.set(str(self.para_fit[1])+'  ')
-            self.y_fit = self.InSb_trans(self.x_new,self.para_fit[0],self.para_fit[1])
+            self.c_fitvalue.set(str(self.para_fit[2])+'  ')
+            self.d_fitvalue.set(str(self.para_fit[3])+'  ')
+            # self.e_fitvalue.set(str(self.para_fit[4])+'  ')
+            # self.f_fitvalue.set(str(self.para_fit[5])+'  ')
+            self.y_fit = self.InSb_trans(self.x_new, 
+                                         self.para_fit[0], 
+                                         self.para_fit[1], 
+                                         self.para_fit[2],
+                                         self.para_fit[3]
+                                         )
             plot0.plot(self.x_new,self.y_fit,label='fitted data')
             
         save_para = open('fitted parameters.txt', 'w')
@@ -548,7 +580,14 @@ class Curvefit:
         if self.fun_choice.get() == 'InSb trans':
             self.entry_a.configure(state='normal')
             self.entry_b.configure(state='normal')
-            self.function_expression.set('a is electron scattering rate and b is background permittivity')
+            self.entry_c.configure(state = 'normal')
+            self.entry_d.configure(state = 'normal')
+            # self.entry_e.configure(state = 'normal')
+            # self.entry_f.configure(state = 'normal')
+            # self.entry_g.configure(state = 'normal')
+            # self.entry_h.configure(state = 'normal')
+            self.function_expression.set('a is electron scattering rate, b is effective electron mass ratio \n '
+                                         +'c is plasma frequency, d is backgroud permittivity')
         
         if self.fun_choice.get() == 'gaussian': 
             self.entry_a.configure(state='normal')
@@ -585,15 +624,15 @@ class Curvefit:
                                          self.d.get(), self.e.get(), self.f.get(), self.g.get(), self.h.get())
             plot0.plot(self.x_new,self.y_fit,label='fitted data')
             
+        if self.fun_choice.get() == 'InSb trans':
+           self.y_fit = self.InSb_trans(self.x_new, self.a.get(), self.b.get(),self.c.get())
+           plot0.plot(self.x_new,self.y_fit,label='fitted data')
+            
         save_para = open('fitted parameters.txt', 'w')
         save_para.write('a: ' + str(self.a.get()) + '\n'
                       + 'b: ' + str(self.b.get()) + '\n' 
                       + 'c: ' + str(self.c.get()) + '\n' 
-                      + 'd: ' + str(self.d.get()) + '\n' 
-                      + 'e: ' + str(self.e.get()) + '\n' 
-                      + 'f: ' + str(self.f.get()) + '\n' 
-                      + 'g: ' + str(self.g.get()) + '\n' 
-                      + 'h: ' + str(self.h.get()) + '\n' )
+                        )
         save_para.close()
         
         plot0.grid(self.gridswitch.get())
@@ -711,46 +750,30 @@ class Curvefit:
         return n
     
     
-    def InSb_trans(self,freq,ve,epi_b):
-        '''
-        
-
-        Parameters
-        ----------
-        freq : 1d array
-            DESCRIPTION. frequency domain obtained from Fourier transform input waves
-        B : TYPE float64
-            DESCRIPTION. External magnetic field strength in T
-
-        Returns
-        -------
-        T_x : 1d array
-            DESCRIPTION. complex transmission coefficient in x direction
-        T_y : 1d array
-            DESCRIPTION. complex transmission coefficient in y direction
-
-        '''
-        B = 0
+    def InSb_trans(self, freq, v_e, m_e, w_e, epi_b):
         d=5*1e-4 #sample thickness
         w=2*pi*freq*1e12 #angular frequency 
         #set parameters for calculation
         n_air=1 # index of air
         e=1.6e-19 #electron charge
         c=3e8 # speed of light
-        v_e=ve*1e12 # electron scattering rate
-        m_e=0.018*9.1e-31 # mass of electron
-        w_t=2*pi*5.9*1e12 # transverse phonon frequency
-        w_l=2*pi*5.54*1e12 # longitudinal phonon frequency
-        # epi_b=16 # background permittivity
+        # v_e=0.86*1e12 # electron scattering rate
+        v_e = v_e*1e12
+        # m_e=0.018*9.1e-31 # effective mass of electron
+        m_e = m_e*9.1e-31
+        w_t=2*pi*5.90e12 # transverse phonon frequency
+        w_l=2*pi*5.54e12 # longitudinal phonon frequency
+        # epi_b=13.82 # background permittivity
+        B = 0
         w_ce=e*B/(m_e) # cyclotron frequency
-        w_e=0.28*2*pi*1e12*np.sqrt(epi_b) #plasma frequency is set to constant 0.28
-        # w_e=0.28*2*pi*1e12
+        # w_e=0.28*2*pi*1e12*np.sqrt(epi_b) #plasma frequency is set to constant 0.28
+        w_e = w_e*2*pi*1e12*np.sqrt(epi_b)
         # w_h=(4*pi*Nh*e^2/m_h*1);
-        v_ph=1*2*pi*1e12 # phonon damping rate
+        v_ph=2*pi*1e12 # phonon damping rate
+        # v_ph = v_ph*1e12
      
        
         epi_ph = epi_b*((w_t**2-w_l**2)/(w_t**2-w**2-1j*v_ph*w))
-
         ncra=np.sqrt(epi_b-w_e**2/(w*(w+1j*v_e-w_ce))+epi_ph)
         ncri=np.sqrt(epi_b-w_e**2/(w*(w+1j*v_e+w_ce))+epi_ph)
 
@@ -760,9 +783,76 @@ class Curvefit:
         t_cri_sa=2*ncri/(n_air+ncri)
         # calculate complex transmission coefficents
         T_cra =t_cra_as*t_cra_sa*np.exp(1j*(ncra-1)*w*d/c)
-            
-        return abs(T_cra)
-# x = np.linspace(0, 10,100)
-# y = x**2
-# fitgo = Curvefit(x, y)
-# fitgo.root.mainloop()
+        T_cri =t_cri_as*t_cri_sa*np.exp(1j*(ncri-1)*w*d/c)
+        T_x = (T_cra+T_cri)/np.sqrt(2)
+        T_y = (T_cra-T_cri)/np.sqrt(2)/1j
+        T_x = fdp.field_remove_nan(T_x)
+        T_y = fdp.field_remove_nan(T_y)
+        trans = np.sqrt(abs(T_x)**2+abs(T_y)**2)
+        return trans
+# if __name__ == '__main__':
+#     freq = np.arange(0.1, 2, step = 0.01)
+#     B = 0
+#     epi_b = 13.82
+#     d=5*1e-4 #sample thickness
+#     w=2*pi*freq*1e12 #angular frequency 
+#     #set parameters for calculation
+#     n_air=1 # index of air
+#     e=1.6e-19 #electron charge
+#     c=3e8 # speed of light
+#     v_e=1.2*1e12 # electron scattering rate
+#     m_e=0.018*9.1e-31 # mass of electron
+#     w_t=2*pi*5.9e12 # transverse phonon frequency
+#     w_l=2*pi*5.54e12 # longitudinal phonon frequency
+#     # w_t = w_t*2*pi*1e12
+#     # w_l = w_l*2*pi*1e12
+#     # epi_b=16 # background permittivity
+#     w_ce=e*B/(m_e) # cyclotron frequency
+#     w_e=0.3*2*pi*1e12*np.sqrt(epi_b) #plasma frequency is set to constant 0.1
+#     # w_e = w_e*2*pi*1e12
+#     # w_e=0.28*2*pi*1e12
+#     # w_h=(4*pi*Nh*e^2/m_h*1);
+#     v_ph=2*pi*1e12 # phonon damping rate
+#     # v_ph = v_ph*2*pi*1e12
+ 
+   
+#     epi_ph = epi_b*((w_t**2-w_l**2)/(w_t**2-w**2-1j*v_ph*w))
+
+#     ncra=np.sqrt(epi_b-w_e**2/(w*(w+1j*v_e-w_ce))+epi_ph)
+#     ncri=np.sqrt(epi_b-w_e**2/(w*(w+1j*v_e+w_ce))+epi_ph)
+
+#     t_cra_as=2*n_air/(n_air+ncra) #calculate Fresnel transmission coefficient
+#     t_cra_sa=2*ncra/(n_air+ncra)
+#     t_cri_as=2*n_air/(n_air+ncri)
+#     t_cri_sa=2*ncri/(n_air+ncri)
+#     # calculate complex transmission coefficents
+#     T_cra =t_cra_as*t_cra_sa*np.exp(1j*(ncra-1)*w*d/c)
+#     T_cri = t_cri_as*t_cri_sa*np.exp(1j*(ncri-1)*w*d/c)
+#     T_x = (T_cra+T_cri)/np.sqrt(2)
+#     T_y = (T_cra-T_cri)/np.sqrt(2)/1j
+#     # T_x = fdp.field_remove_nan(T_x)
+#     # T_y = fdp.field_remove_nan(T_y)
+    
+#     trans = np.sqrt(abs(T_x)**2+abs(T_y)**2)
+    
+#     # polarangle = ((np.unwrap(np.angle(T_cra))-np.unwrap(np.angle(T_cri)))/2)/2/pi*360
+#     plt.plot(freq, trans)
+#     # plt.xlim((0,1.5))
+#     # plt.ylim((0,10*100))
+#     # x = np.linspace(0, 10,100)
+#     # y = x**2
+#     root = tk.Tk()
+#     fitgo = Curvefit(root,freq, trans)
+#     root.mainloop()
+if __name__ == '__main__':
+    path = 'C:/Users/Admin/Dropbox/Data/SPEC2/2024/Jan/1-25-2024/exported'
+    fname = 'trans_export_InSb_180K'
+    f, x, y = fdp.load_single_spec(path, fname)
+    x = x[(f<=1.5)&(f>=0.1)]
+    f = f[(f>=0.1)&(f<=1.5)]
+    root = tk.Tk()
+    fitgo = Curvefit(root, f, x)
+    root.mainloop()
+    
+        
+    

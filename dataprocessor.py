@@ -13,6 +13,11 @@ from statistics import mean
 from scipy.signal.windows import blackman
 from numpy import pi
 from scipy.signal import hilbert
+import os
+import copy
+from scipy.integrate import simps
+# from numba import njit
+# from numba.experimental import jitclass
 
 class SpecProcess:
     def __init__(self,path,expstyle,filetype='.dat'):
@@ -44,7 +49,12 @@ class SpecProcess:
         for i in range(0,len(self.filenames)):
             self.pathname = glob.glob(self.path+'/'+self.filenames[i]+'_*[0-9]'+self.filetype)   
             # Nspec = len(self.pathname)
-            data0 = np.loadtxt(self.pathname[0])
+            try:
+                data0 = np.loadtxt(self.pathname[0])
+            except ValueError:
+                data0 = np.loadtxt(self.pathname[0], dtype = complex)
+            else:
+                data0 = np.loadtxt(self.pathname[0])
             Ndata,Ncol = np.shape(data0)
             x_store = data0[:, 1]
             x_store = x_store[:, np.newaxis]
@@ -214,90 +224,90 @@ class SpecProcess:
             
     
     
-    def polarimetry(self,comp1,comp2,time,idxsam,idxref,idxref_select=[]):
-        samx = []
-        samsx = []
-        samy = []
-        samsy = []
-        tsam = []
-        fsam = []
-        refx = []
-        refsx = []
-        refy = []
-        refsy = []
-        tref = []
-        fref = []
-        trans = []
-        theta = []
-        eta = []
-        samnames = []
-        refnames = []
-        Efield = dict()
-        #save sample spectrum data 
-        for i in idxsam:
-            samx.append(comp1[self.filenames[i]] + comp2[self.filenames[i]])
-            samy.append(comp1[self.filenames[i]] - comp2[self.filenames[i]])
-            tsam.append(time[self.filenames[i]])
-            samnames.append(self.filenames[i])
-        #fft sample data and get polarization angle as well as ellipticity  
-        for i in range(len(samx)):
-            [freq,sx] = self.fftx(samx[i],tsam[i],2)
-            [freq,sy] = self.fftx(samy[i],tsam[i],2)
-            fsam.append(freq)
-            samsx.append(sx)
-            samsy.append(sy)
-            Ecra = sx + 1j*sy
-            Ecri = sx - 1j*sy
-            theta.append((np.unwrap(np.angle(Ecra))-np.unwrap(np.angle(Ecri)))/2)
-            eta.append((abs(Ecri)-abs(Ecra))/(abs(Ecri)+abs(Ecra)))
-            del freq,sx,sy
-        #save referene spectrumm data
-        if idxref == []:
-            for k in idxref:
-                k = int(k)
-                refx.append(comp1[self.filenames[k]] + comp2[self.filenames[k]])
-                refy.append(comp1[self.filenames[k]] - comp2[self.filenames[k]])
-                tref.append(time[self.filenames[k]])
-                refnames.append(self.filenames[k])
-        else:
-            for k in idxref_select:
-                id1 = int(idxref[k])
-                id2 = int(idxref[k+1])
-                refx.append(1/2*(comp1[self.filenames[id1]]+comp1[self.filenames[id2]]) + 1/2*(comp2[self.filenames[id1]]+comp2[self.filenames[id2]]))
-                refy.append(1/2*(comp1[self.filenames[id1]]+comp1[self.filenames[id2]]) - 1/2*(comp2[self.filenames[id1]]+comp2[self.filenames[id2]]))
-                tref.append(time[self.filenames[id1]])
-                refnames.append(self.filenames[id1])
-        #fft reference data and calculate transmission            
-        for i in range(len(tref)):
-            [freq,sx] = self.fftx(refx[i],tref[i],2)
-            [freq,sy] = self.fftx(refy[i],tref[i],2)
-            refsx.append(sx)
-            refsy.append(sy)
-            fref.append(freq)
-            Asam = np.sqrt(abs(samsx[i])**2+abs(samsy[i])**2)
-            Aref = np.sqrt(abs(refsx[i])**2+abs(refsy[i])**2)
-            trans.append(Asam/Aref)
-            del freq,sx,sy
+    # def polarimetry(self,comp1,comp2,time,idxsam,idxref,idxref_select=[]):
+    #     samx = []
+    #     samsx = []
+    #     samy = []
+    #     samsy = []
+    #     tsam = []
+    #     fsam = []
+    #     refx = []
+    #     refsx = []
+    #     refy = []
+    #     refsy = []
+    #     tref = []
+    #     fref = []
+    #     trans = []
+    #     theta = []
+    #     eta = []
+    #     samnames = []
+    #     refnames = []
+    #     Efield = dict()
+    #     #save sample spectrum data 
+    #     for i in idxsam:
+    #         samx.append(comp1[self.filenames[i]] + comp2[self.filenames[i]])
+    #         samy.append(comp1[self.filenames[i]] - comp2[self.filenames[i]])
+    #         tsam.append(time[self.filenames[i]])
+    #         samnames.append(self.filenames[i])
+    #     #fft sample data and get polarization angle as well as ellipticity  
+    #     for i in range(len(samx)):
+    #         [freq,sx] = self.fftx(samx[i],tsam[i],2)
+    #         [freq,sy] = self.fftx(samy[i],tsam[i],2)
+    #         fsam.append(freq)
+    #         samsx.append(sx)
+    #         samsy.append(sy)
+    #         Ecra = sx + 1j*sy
+    #         Ecri = sx - 1j*sy
+    #         theta.append((np.unwrap(np.angle(Ecra))-np.unwrap(np.angle(Ecri)))/2)
+    #         eta.append((abs(Ecri)-abs(Ecra))/(abs(Ecri)+abs(Ecra)))
+    #         del freq,sx,sy
+    #     #save referene spectrumm data
+    #     if idxref == []:
+    #         for k in idxref:
+    #             k = int(k)
+    #             refx.append(comp1[self.filenames[k]] + comp2[self.filenames[k]])
+    #             refy.append(comp1[self.filenames[k]] - comp2[self.filenames[k]])
+    #             tref.append(time[self.filenames[k]])
+    #             refnames.append(self.filenames[k])
+    #     else:
+    #         for k in idxref_select:
+    #             id1 = int(idxref[k])
+    #             id2 = int(idxref[k+1])
+    #             refx.append(1/2*(comp1[self.filenames[id1]]+comp1[self.filenames[id2]]) + 1/2*(comp2[self.filenames[id1]]+comp2[self.filenames[id2]]))
+    #             refy.append(1/2*(comp1[self.filenames[id1]]+comp1[self.filenames[id2]]) - 1/2*(comp2[self.filenames[id1]]+comp2[self.filenames[id2]]))
+    #             tref.append(time[self.filenames[id1]])
+    #             refnames.append(self.filenames[id1])
+    #     #fft reference data and calculate transmission            
+    #     for i in range(len(tref)):
+    #         [freq,sx] = self.fftx(refx[i],tref[i],2)
+    #         [freq,sy] = self.fftx(refy[i],tref[i],2)
+    #         refsx.append(sx)
+    #         refsy.append(sy)
+    #         fref.append(freq)
+    #         Asam = np.sqrt(abs(samsx[i])**2+abs(samsy[i])**2)
+    #         Aref = np.sqrt(abs(refsx[i])**2+abs(refsy[i])**2)
+    #         trans.append(Asam/Aref)
+    #         del freq,sx,sy
         
-        Efield['sam xvalues td'] = samx 
-        Efield['sam xvalues fd'] = samsx 
-        Efield['sam yvalues td'] = samy
-        Efield['sam yvalues fd'] = samsy 
-        Efield['sam time axis'] = tsam
-        Efield['sam frequency axis'] = fsam
-        Efield['ref xvalues td'] = refx 
-        Efield['ref xvalues fd'] = refsx 
-        Efield['ref yvalues td'] = refy
-        Efield['ref yvalues fd'] = refsy 
-        Efield['ref time axis'] = tref
-        Efield['ref frequency axis'] = fref
-        Efield['polarization angles'] = theta
-        Efield['Ellipticity angles'] = eta
-        Efield['transmission'] = trans
-        Efield['sam names'] = samnames
-        Efield['ref names'] = refnames
+    #     Efield['sam xvalues td'] = samx 
+    #     Efield['sam xvalues fd'] = samsx 
+    #     Efield['sam yvalues td'] = samy
+    #     Efield['sam yvalues fd'] = samsy 
+    #     Efield['sam time axis'] = tsam
+    #     Efield['sam frequency axis'] = fsam
+    #     Efield['ref xvalues td'] = refx 
+    #     Efield['ref xvalues fd'] = refsx 
+    #     Efield['ref yvalues td'] = refy
+    #     Efield['ref yvalues fd'] = refsy 
+    #     Efield['ref time axis'] = tref
+    #     Efield['ref frequency axis'] = fref
+    #     Efield['polarization angles'] = theta
+    #     Efield['Ellipticity angles'] = eta
+    #     Efield['transmission'] = trans
+    #     Efield['sam names'] = samnames
+    #     Efield['ref names'] = refnames
         
-        return Efield
+    #     return Efield
 
     def average_polarimetry_so(self,t,x):
         samx = dict()
@@ -443,7 +453,7 @@ class SpecProcess:
             else:
                 x_new[key] = value
         return x_new
-    
+  
 class Basic_functions:
     def __init__(self):
         self.default = 0
@@ -466,8 +476,16 @@ class Basic_functions:
         if type(x) is dict:
             x_new = x
         return x_new
-
     
+    def find_1st_zero(self,x,y):
+        x0 = None
+        for i in range(0,len(y)-1):
+            if y[i]*y[i+1] <= 0:
+               x0 = (x[i]+x[i+1])/2
+            if i == len(y)-2 and x0 == None:
+                x0 = x[round(len(x)/2)]
+        return x0
+
     def array_chop_pad(self, x, y, x0, x1):
         idx0 = np.where(x >= x0)[0][0]
         idx1 = np.where(x <= x1)[0][-1]
@@ -476,11 +494,14 @@ class Basic_functions:
         y_new = np.concatenate((pad0, y[idx0:idx1], pad1), axis = 0)
         return y_new
     
-    def array_chop(self, x, y, x0, x1):
+    def array_chop(self, x, y, x0, x1):      
+        # x0 = round(x0, ndigits = 2)
+        # x1 = round(x1, ndigits = 2)
+        # step = round(abs(x[1]-x[0]), ndigits = 2)
         idx0 = np.where(x >= x0)[0][0]
         idx1 = np.where(x <= x1)[0][-1]
-        x_new = x[idx0:idx1]
-        y_new = y[idx0:idx1]
+        x_new = x[idx0:idx1+1]
+        y_new = y[idx0:idx1+1]
         return x_new, y_new
     
     def findzeropoints(self,x,y):
@@ -585,103 +606,9 @@ class Basic_functions:
     #         n[samname] = self.phi_sam/omega/self.L0*c+1
     #     return n
     
-    def getindex_array(self,freq,sx_sam,sx_ref,L,SX_echo=None,c=3e8, ph_mod = None):
-        '''
-        Parameters
-        ----------
-        freq : np.array
-            DESCRIPTION.frequency of the spectrums
-        E_sam : 1d np.array
-            DESCRIPTION.sample spectrum
-        E_ref : 1d np.array
-            DESCRIPTION.reference spectrum
-        L : float
-            DESCRIPTION.initial guess of the sample thickness
-        E_echo : np.array, optional
-            DESCRIPTION. echo spectrum
-        c : float, optional
-            DESCRIPTION.speed of light, The default is 3e8.
-        Returns
-        -------
-        n : np.array
-            DESCRIPTION. calcullated refractive index
-        '''
-        
-        
-        
-        # E_sam = sx_sam
-        # E_ref = sx_ref
-        # freq, E_sam, E_ref = self.badtrans_remove(freq, sx_sam, sx_ref)
-        freq, E_sam, E_ref = self.FD_noise_remove(freq, sx_sam, sx_ref)
-        omega = freq*2*pi*1e12
-        
-        self.freq  = freq
-        if SX_echo is None: #if there is no echo in the scan
-            
-            # self.phi = np.angle(E_sam/E_ref) #calculate phase of transmission
-            if ph_mod == None:
-                self.phi_sam = abs(np.unwrap(np.angle(E_sam), discont = pi/4))
-                self.phi_ref = abs(np.unwrap(np.angle(E_ref), discont = pi/4))
-
-            else:
-                self.phi_sam = abs(np.unwrap(np.angle(E_sam), discont = pi/4))
-                self.phi_ref = abs(np.unwrap(np.angle(E_ref), discont = pi/4))
-                self.phi_sam = self.phi_sam + ph_mod
-                # self.phi_ref += ph_mod
-            
-            self.phi = np.unwrap(self.phi_sam - self.phi_ref, discont = pi/4)
-            # self.phi = np.unwrap(self.phi, discont = pi/4)
-            # self.phi = abs(self.phi)
-            n = self.phi/omega/L*c+1 # calculate refractive index
-            # n = self.index_normal(freq, n)
-            
-        else:
-            freq, E_sam, E_ref, E_echo = self.badtrans_remove(freq, sx_sam, sx_ref, E_echo = SX_echo)
-            self.Lr = np.linspace(0.8*L,1.2*L,1000) #create a range of estimated thickness
-            self.dn = np.zeros((len(self.freq),len(self.Lr))) #prepare dn to store the refractive index difference
-            # self.L0 = np.zeros(len(self.freq))
-            # self.dn_max = np.zeros(len(self.Lr))
-            # self.dn_min = np.zeros(len(self.Lr))
-            self.phi_sam = np.unwrap((np.angle(E_sam/E_ref)),discont=pi/4) # phase angle of transmission from sample signal
-            self.phi_echo = np.unwrap((np.angle(E_echo/E_ref)),discont=pi/4)#phase angle of transmission from echo signal
-            # self.phi_sam = (np.angle(E_sam/E_ref))
-            # self.phi_echo = (np.angle(E_echo/E_ref))
-            for i in range(0,len(self.Lr)):
-                self.n_sam = self.phi_sam/omega/self.Lr[i]*c+1  #refractive index calculated from sample signal
-                self.n_sam = self.index_normal(self.n_sam)
-                self.n_echo = (self.phi_echo/omega/self.Lr[i]*c+1)/3 #refractive index calculated from echo signal
-                self.n_echo = self.index_normal(self.n_echo)
-                self.dn[:,i] = self.n_echo-self.n_sam # difference of refractive index average over entire frequency range
-                # self.dn_max[i] = max(self.n_echo-self.n_sam)
-                # self.dn_min[i] = min(self.n_echo-self.n_sam)
-            # self.L0 = self.find_1st_zero(self.Lr,self.dn) #get the true thickness by finding the zeros point
-            self.L0 = L
-            n = self.phi_sam/omega/self.L0*c+1 #use the true thickness to calculate refractive index
-            n = self.index_normal(n)
-            
-        a = -2/L*np.log(abs(E_sam)/abs(E_ref)*(1+n)**2/4/n)
-        # k = np.imag(n)
-        # a = -4*pi*freq*k/c
-        return  freq, E_sam, E_ref, n, a, self.phi_sam, self.phi_ref
     
-    def badtrans_remove(self, freq, E_sam, E_ref, freq_limit = 3):
-        idx_limit = np.where(freq <= freq_limit)[0][-1]
-        self.T = (abs(E_sam)/abs(E_ref))[0:idx_limit]
-        self.idxs = np.where(self.T >= 1)[0]
-        d0 = 0
-        idx0 = 0
-        for i in range(0, len(self.idxs)-1):
-            d1 = self.idxs[i+1]-self.idxs[i]
-            if d1 >= d0:
-                idx0 = self.idxs[i] + 1
-                idx1 = self.idxs[i+1] - 1
-                d0 = d1
-        # self.idx0 = idx0 
-        # self.idx1 = idx1
-        E_sam = E_sam[idx0:idx1]
-        E_ref = E_ref[idx0:idx1]
-        freq = freq[idx0:idx1]
-        return freq, E_sam, E_ref
+    
+    
     def FD_noise_remove(self, f, sx_sam, sx_ref, sx_echo = None):
         idx0 = np.where(f>0.1)[0][0]
         idx1 = np.where(f>3)[0][0]
@@ -786,6 +713,7 @@ class Basic_functions:
                 self.freq[name] = self.freq[name][np.where(self.freq[name]>0.1)]
                 self.sx[name] = self.sx[name][np.where(self.freq[name]>0.1)]
         return self.freq,self.sx     
+    
     
     def fftx(self,xvalues,tvalues,pad):
         xvalues = self.formatinput(xvalues)
@@ -895,6 +823,7 @@ class Basic_functions:
                 self.omega[name] = 2*np.pi*fs/2*np.linspace(0,1,len(self.sx[name]))
         return self.omega,self.sx
     
+
     def array_fftx(self,xvalues,tvalues,pad=2):
         ts = abs(tvalues[1]-tvalues[0])
         NFFT = int(2**(np.ceil(np.log2(len(tvalues)))+pad))
@@ -919,6 +848,7 @@ class Basic_functions:
         # freq = freq[np.where(freq>0.1)]
         # sx = sx[np.where(freq>0.1)]
         return freq,sx 
+    
     
     def array_ifftx(self,t,sx):
         # fs = abs(f[1]-f[0])
@@ -1003,16 +933,104 @@ class Basic_functions:
         return x,time
     
     def dict_getabs(self,sxvalues):
-        names = list(sxvalues)
+        sx_in = copy.deepcopy(sxvalues)
+        sx_out = {}
+        names = list(sx_in)
         for name in names:
-            sxvalues[name] = abs(sxvalues[name])
-        return sxvalues
+            sx_out[name] = abs(sx_in[name])
+        return sx_out
     
     def dict_getreal(self,sxvalues):
         names = list(sxvalues)
         for name in names:
             sxvalues[name] = np.real(sxvalues[name])
         return sxvalues
+    
+    def array_FWHM(f, E):
+        '''
+        
+
+        Parameters
+        ----------
+        freq : TYPE 1D numpy array
+            DESCRIPTION. frequency
+        E : TYPE
+            DESCRIPTION. frequency domain field amplitude
+
+        Returns
+        -------
+        FW : TYPE float
+            DESCRIPTION. Full width half maximum
+
+        '''
+        hmax = max(E)/2
+        idx0 = np.where(E >= hmax/2)[0][0]
+        idx1 = np.where(E >= hmax/2)[0][-1]
+        FW = abs(f[idx1]-f[idx0])
+        return FW
+            
+    def dict_key_get_T(key):
+        key_strs = key.split('_')
+        picked_str = ''
+        for key_str in key_strs:
+            if 'K' in key_str:
+                picked_str = key_str
+        if picked_str == '':
+            num = 0
+        else:
+            num = ''
+            for char in picked_str:
+                if char.isdigit():
+                    num = num + char
+            num = int(num)
+        return num
+    
+    def dict_key_get_D(string):
+        str_seg_all = string.split('_')
+        for str_seg in str_seg_all:
+            if 'D' in str_seg:
+                pick_str = str_seg
+                continue
+        num = ''
+        for char in pick_str:
+            if char.isdigit():
+                num = num + char
+        num = int(num)
+        return num
+    
+    def string_get_F(key):
+        key_strs = key.split('_')
+        picked_str = ''
+        for key_str in key_strs:
+            if 'F' in key_str:
+                picked_str = key_str
+                continue
+        if picked_str == '':
+            num = 0
+        else:
+            num = ''
+            for char in picked_str:
+                if char.isdigit():
+                    num = num + char
+            num = int(num)
+        return num
+    
+    def dict_key_get_B(key):
+        key_strs = key.split('_')
+        picked_str = ''
+        for key_str in key_strs:
+            if 'T' in key_str:
+                picked_str = key_str
+        if picked_str == '':
+            num = 0
+        else:
+            num = ''
+            for char in picked_str:
+                if char.isdigit():
+                    num = num + char
+            num = int(num)
+        return num
+        
     
     def dict_total_field(self,sx,sy):
         sall = dict() 
@@ -1055,6 +1073,8 @@ class Basic_functions:
             x_sq[key] = x[key]**2
         return x_sq
     
+    
+    
     def find_list_common(self, str_list):
         str_list = list(str_list)
         com_str = ''
@@ -1080,3 +1100,84 @@ class Basic_functions:
             if char in str2_char:
                 com_str = com_str + char + '_'
         return com_str
+    
+    def save_data(path, fname, t, x, y = None):
+        if os.path.exists(path):
+            pass
+        else:
+            os.makedirs(path)
+        if y == None:
+            if len(t) == len(x):
+                y = np.zeros_like(t)
+                spec = np.stack((t,x,y), axis = 1)
+                np.savetxt(path+fname, spec)
+            else:
+                raise Exception('dimension of time and amplitude does not match')
+        else:
+            if len(t) == len(x) and len(t) == len(y):
+                spec = np.stack((t,x,y), axis = 1)
+                np.savetxt(path+fname, spec)
+            else:
+                raise Exception('Dimension of time and amplitude does not match')
+             
+    def load_single_spec(folder, fname, ftype = '.dat'):
+        folder = folder.replace('\\','/')
+        flist = glob.glob(folder+'/'+fname+'_*[0-9]'+ftype)
+        t_store = []
+        x_store = []
+        y_store = []
+        for i in range(0, len(flist)):
+            fnum = str(i+1)
+            try:
+                data = np.loadtxt(folder+'/'+fname+'_'+fnum+ftype)
+            except OSError:
+                continue
+            else:
+                data = np.loadtxt(folder+'/'+fname+'_'+fnum+ftype)
+                t_store.append(data[:,0])
+                x_store.append(data[:,1])
+                y_store.append(data[:,2])
+        t_store = np.array(t_store).T
+        x_store = np.array(x_store).T
+        y_store = np.array(y_store).T
+        return t_store, x_store, y_store
+    
+    def array_cal_J(t, E1, E2):
+        if len(t) == len(E1):
+            if len(E1) == len(E2):
+                tw_len = []
+                J = []
+                idx0 = int(np.floor(len(E1)/2))
+                idx1 = idx0 + 1
+                while idx0 >= 0 and idx1 <= len(E1)-1:
+                    tw_len.append(abs(t[idx1]-t[idx0]))
+                    E1_w = E1[idx0:idx1]
+                    E2_w = E2[idx0:idx1]
+                    J.append(2*simps(abs(E1_w-E2_w)**2)/simps(abs(E1_w)**2+abs(E2_w)**2))
+                    idx0 = idx0 - 1
+                    idx1 = idx1 + 1
+            else:
+                raise Exception('number of data for E1 and E2 does not match')
+        else:
+            raise Exception('number of data for t and E does not match')
+        return np.array(tw_len), np.array(J)
+    
+    def array_cal_J2(t, E1, E2):
+        len_t = round(0.6/0.05)
+        if len(t) == len(E1):
+            if len(E1) == len(E2):
+                tw_len = []
+                J = []
+                idx0 = np.where(t>t[0]+0.6)[0][0]
+                while idx0 + len_t < len(t):
+                    E1_w = E1[idx0-len_t:idx0 + len_t+1]
+                    E2_w = E2[idx0-len_t:idx0 + len_t+1]
+                    # peak1 = max(abs(E1_w))
+                    tw_len.append(t[idx0])
+                    J.append(2*simps(abs(E1_w-E2_w)**2)/simps(abs(E1_w)**2+abs(E2_w)**2))
+                    idx0 = idx0+1
+            else:
+                raise Exception('number of data for E1 and E2 does not match')
+        else:
+            raise Exception('number of data for t and E does not match')
+        return np.array(tw_len), np.array(J)
