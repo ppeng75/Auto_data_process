@@ -15,6 +15,7 @@ Created on Wed Apr 26 11:03:52 2023
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.lines import Line2D
+from matplotlib.patches import Rectangle
 import copy
 import matplotlib as mpl
 from matplotlib.figure import Figure
@@ -32,14 +33,15 @@ import configparser as cfp
 
 
 class Plottool:
-    def __init__(self,frame,xvalues,yvalues, nrow = 1, ncol = 1, sort_var = None):
+    def __init__(self,frame,xvalues,yvalues, nrow = 1, ncol = 1, sort_var = None, xlabel = None, ylabel = None,
+                 xlimits = None, ylimits = None):
         '''
         
 
         Parameters
         ----------
-        root : tk.Tk()
-            DESCRIPTION: tk root to initiate gui base window
+        frame : ttk.labelframe
+            DESCRIPTION: tk frame to initiate gui base window
         xvalues : dict or list of 1d array or ndarray
             DESCRIPTION: x values to be plotted
         yvalues : dict or list of 1d array or ndarray
@@ -47,7 +49,7 @@ class Plottool:
 
         Returns
         -------
-        plot of desired axis limit, labels and fonts
+        interactive gui for plot
 
         '''
         
@@ -68,7 +70,8 @@ class Plottool:
             self.y_plot[key] = {'linestyle': 'solid',
                                 'linecolor': 'C'+str(n_color),
                                 'scale': 1,
-                                'label': key}
+                                'label': key,
+                                'trans': 1}
             n_color = n_color+1
         self.action = tk.StringVar(value = 'ready')
 
@@ -81,8 +84,8 @@ class Plottool:
             self.fontsize_ax = tk.DoubleVar(value = 20)
             self.fontsize_lg = tk.DoubleVar(value = 20)
             self.fontsize_tick = tk.DoubleVar(value = 20)
-            self.labelx = tk.StringVar()
-            self.labely = tk.StringVar()
+            self.labelx = tk.StringVar(value = xlabel)
+            self.labely = tk.StringVar(value = ylabel)
             self.xlim_l = tk.DoubleVar()
             self.xlim_h = tk.DoubleVar()
             self.ylim_l = tk.DoubleVar()
@@ -94,6 +97,7 @@ class Plottool:
             self.config_largeplot = tk.StringVar(value='4,3,300')
             self.notation = tk.StringVar(value = '0.01,0.95,6,(a)')
             self.line_trans = tk.StringVar(value = '0.5,0.5,0.5,0.5,1,1')
+            self.line_trans_switch = tk.IntVar(value = 0)
         else:
             pt_config = cfp.ConfigParser()
             pt_config.read('plottool_v7.ini')
@@ -102,8 +106,14 @@ class Plottool:
             self.fontsize_ax = tk.DoubleVar(value = float(pt_config['init']['fontsize_ax']))
             self.fontsize_lg = tk.DoubleVar(value = float(pt_config['init']['fontsize_lg']))
             self.fontsize_tick = tk.DoubleVar(value = float(pt_config['init']['fontsize_tick']))
-            self.labelx = tk.StringVar(value = pt_config['init']['label_x'])
-            self.labely = tk.StringVar(value = pt_config['init']['label_y'])
+            if xlabel == None:
+                self.labelx = tk.StringVar(value = pt_config['init']['label_x'])
+            else: 
+                self.labelx = tk.StringVar(value = xlabel)
+            if ylabel == None:
+                self.labely = tk.StringVar(value = pt_config['init']['label_y'])
+            else:
+                self.labely = tk.StringVar(value = ylabel)
             self.xlim_l = tk.DoubleVar(value = float(pt_config['init']['xlim_l']))
             self.xlim_h = tk.DoubleVar(value = float(pt_config['init']['xlim_h']))
             self.ylim_l = tk.DoubleVar(value = float(pt_config['init']['ylim_l']))
@@ -114,6 +124,7 @@ class Plottool:
             self.notation = tk.StringVar(value = pt_config['init']['fig_notation'])
             self.config_largeplot = tk.StringVar(value = pt_config['init']['config_largeplot'])
             self.line_trans = tk.StringVar(value = pt_config['init']['line_trans'])
+            self.line_trans_switch = tk.IntVar(value = pt_config['init']['line_trans_switch'])
             
              
             
@@ -121,7 +132,9 @@ class Plottool:
         self.nrow = nrow
         self.ncol = ncol
         self.vline_switch = tk.IntVar(value = 0)
-        self.hline_switch = tk.IntVar(value = 0)
+        self.rect_switch = tk.IntVar(value = 0)
+        self.notation_switch = tk.IntVar(value = 0)
+        self.semilogy_switch = tk.IntVar(value = 0)
         self.nrow_new = tk.IntVar(value = 1)
         self.ncol_new = tk.IntVar(value = 1)
         self.plot_num = tk.IntVar()
@@ -137,7 +150,7 @@ class Plottool:
         self.user_linestyle_switch = tk.IntVar(value = 0)
         self.legendnames_display = tk.StringVar(value = 'None')
         self.arb_legend = []
-        self.arb_lg_switch = 0
+        self.arb_lg_off = tk.IntVar(value = 1)
         self.lg_pos = tk.StringVar(value = 'best')
         self.userlgname = tk.IntVar(value=0)
         self.plot_scale = tk.StringVar()
@@ -170,8 +183,8 @@ class Plottool:
                                 'black': "#000000",
                                 'yellow': "#F0E442",
                                 'grey': "#999999"}
-        self.ok_colors = ["#56B4E9", "#E69F00", "#009E73", "#F5C710", "#D55E00", "#CC79A7",
-                           "#0072B2", "#D55E00", "#000000", "#F0E442", "#999999"]
+        self.ok_colors = ["#56B4E9", "#E69F00", "#009E73", "#F5C710", "#000000","#D55E00", "#CC79A7",
+                           "#0072B2", "#D55E00", "#F0E442", "#999999"]
         
         self.gridswitch = tk.IntVar(value = 1)
         self.color_type = tk.StringVar(value = 'name')
@@ -200,6 +213,7 @@ class Plottool:
         
         label_fig_notation = ttk.Label(self.window1, text = 'Enter Figure annotation here: ')
         entry_fig_notation = ttk.Entry(self.window1, textvariable = self.notation)
+        checkbutton_notation = ttk.Checkbutton(self.window1, text = 'use notation: ', variable = self.notation_switch)
         
       
         
@@ -207,6 +221,7 @@ class Plottool:
         entry_config_largeplot = ttk.Entry(self.window1, textvariable = self.config_largeplot, width = 30)
         button_large_plot = ttk.Button(self.window1, text = 'make large plot', command = self.make_large_plot)
         button_draw_vlines = ttk.Button(self.window1, text = 'draw vlines', command = self.vlines_params)
+        button_draw_rect = ttk.Button(self.window1, text = 'draw rect', command = self.rect_params)
         
         
         
@@ -218,9 +233,10 @@ class Plottool:
         self.combobox_ncol = ttk.Combobox(self.window1, textvariable = self.ncol_new, width = 5)
         self.combobox_ncol['values'] = [1, 2, 3]
         self.combobox_ncol.bind('<<ComboboxSelected>>', self.create_subplots)
-        label_combobox_plotnum = ttk.Label(self.window1, text = 'Select subplot number to plot: ', width = 40)
+        label_combobox_plotnum = ttk.Label(self.window1, text = 'Select subplot number to plot: ', width = 30)
         self.combobox_plot_num = ttk.Combobox(self.window1, textvariable = self.plot_num, width = 5)
         self.combobox_plot_num['values'] = self.all_plot_nums
+        checkbotton_semilogy = ttk.Checkbutton(self.window1, text = 'semilogy', variable = self.semilogy_switch)
         
         
         button_operate_plot.grid(column = 0,row = 12, sticky = 'w')
@@ -229,12 +245,14 @@ class Plottool:
         entry_config_largeplot.grid(column = 4, row = 12, columnspan = 2, sticky = 'w')
         button_large_plot.grid(column = 6, row = 12, sticky = 'w')
         button_draw_vlines.grid(column  = 7, row = 12, sticky = 'w')
+        button_draw_rect.grid(column = 8, row = 12, sticky = 'w')
         label_combobox_nrow.grid(column = 0, row = 13, sticky = 'w')
         self.combobox_nrow.grid(column = 1, row = 13, sticky = 'w')
         label_combobox_ncol.grid(column = 2, row = 13, sticky = 'w')
         self.combobox_ncol.grid(column = 3, row = 13, sticky = 'w')
-        label_combobox_plotnum.grid(column = 4, row = 13, columnspan = 4, sticky = 'w')
-        self.combobox_plot_num.grid(column = 8, row = 13, sticky = 'w')
+        label_combobox_plotnum.grid(column = 4, row = 13, columnspan = 2, sticky = 'w')
+        self.combobox_plot_num.grid(column = 6, row = 13, sticky = 'w')
+        checkbotton_semilogy.grid(column = 7, row = 13, sticky = 'w')
         
         self.button_plot.grid(column = 9, row = 13, sticky = 'w')
         
@@ -243,6 +261,7 @@ class Plottool:
         button_save_figinfo.grid(column = 2, row = 14, sticky = 'w')
         label_fig_notation.grid(column = 3, row = 14, sticky = 'w')
         entry_fig_notation.grid(column = 4, row = 14, sticky = 'w')
+        checkbutton_notation.grid(column = 5, row = 14, sticky = 'w')
         
         '''second window for adjusting figure'''
     
@@ -287,7 +306,8 @@ class Plottool:
         
         # widges for legends
         label_entry_lgnames = tk.Label(self.window, text = 'Enter legends here, use + as seperator:')
-        self.entry_legendnames = ttk.Entry(self.window,textvariable=self.legendnames,width = 70)
+        self.entry_legendnames = ttk.Entry(self.window,textvariable=self.legendnames,width = 80)
+        checkbutton_arblegend = ttk.Checkbutton(self.window, variable = self.arb_lg_off, text = 'auto lg style')
         # label_lg_0 = ttk.Label(self.window4, text = 'Following legends will be used: ')
         # label_show_loaded_lgs = ttk.Label(self.window4, textvariable = self.legendnames_display)
         # label_lg_pos = ttk.Label(self.window4, text = 'Legend position: ')
@@ -296,8 +316,9 @@ class Plottool:
                                     'upper center', 'lower center']
         button_loadlegendnames = ttk.Button(self.window,text='Load',command=self.load_lg_names)
         label_line_trans = ttk.Label(self.window, text = 'Enter line transparency here, use + as seperator: ')
-        entry_line_trans = ttk.Entry(self.window, textvariable = self.line_trans, width = 70)
-        button_line_trans = ttk.Button(self.window, text = 'laod', command = self.load_line_trans)
+        entry_line_trans = ttk.Entry(self.window, textvariable = self.line_trans, width = 80)
+        button_line_trans = ttk.Button(self.window, text = 'load', command = self.load_line_trans)
+        # checkbutton_line_trans = ttk.Checkbutton(self.window, variable = self.line_trans_switch, text = 'user trans on')
         
         
         
@@ -336,9 +357,11 @@ class Plottool:
         # label_lg_pos.grid(column = 4, row = 1, columnspan = 1, sticky = 'w')
         combobox_lg_pos.grid(column = 6, row = 5, columnspan = 1, sticky = 'w')
         button_loadlegendnames.grid(column = 7, row = 5, columnspan = 1, sticky = 'w')
+        checkbutton_arblegend.grid(column = 8, row = 5, columnspan = 1, sticky = 'w')
         label_line_trans.grid(column = 0, row = 6, columnspan = 2, sticky = 'w')
         entry_line_trans.grid(column = 0, row = 7, columnspan = 5, sticky = 'w')
-        button_line_trans.grid(column = 1, row = 7, columnspan = 1, sticky = 'w')
+        button_line_trans.grid(column = 5, row = 7, columnspan = 1, sticky = 'w')
+        # checkbutton_line_trans.grid(column = 6, row = 7, columnspan = 1, sticky = 'w')
         
         
         '''third window for choose x and y to plot'''
@@ -451,9 +474,11 @@ class Plottool:
                              'linestyles': self.linestyles.get(),
                              'colors': self.usercolor_varibable.get(),
                              'fig_notation': self.notation.get(),
-                             'config_largeplot': self.config_largeplot.get()}
-        with open('plottool_v5.ini','w') as plottool_v5_init:
-            pt_config.write(plottool_v5_init)
+                             'config_largeplot': self.config_largeplot.get(),
+                             'line_trans': self.line_trans.get(),
+                             'line_trans_switch': self.line_trans_switch.get()}
+        with open('plottool_v7.ini','w') as plottool_v7_init:
+            pt_config.write(plottool_v7_init)
         self.action.set('current entry values are saved as default values')
     
 
@@ -588,13 +613,33 @@ class Plottool:
         self.arb_legend = []
         self.userlegendnames = self.legendnames.get().split('+')
         self.legendnames_display.set(self.legendnames.get().replace('+', '\n'))
+        
         for i,lgname in enumerate(self.userlegendnames):
-            self.arb_legend.append(Line2D([],[],
-                                          linewidth = self.line_weight.get(), 
-                                          color = self.colors[i%9],
-                                          label = lgname)
-                                  )
-        self.action.set('user defined legend names loaded')
+            lg_specs = lgname.split(',')
+            if len(lg_specs) == 1:
+                self.arb_legend.append(Line2D([],[],
+                                              linewidth = self.line_weight.get(), 
+                                              color = self.colors[i%9],
+                                              label = lg_specs[0])
+                                      )
+            else:
+                newline = Line2D([],[], linewidth = self.line_weight.get(), 
+                                        label = lg_specs[0]
+                                )
+                for spec in lg_specs:
+                    if spec in list(self.dict_ok_colors):
+                        newline.set_color(self.dict_ok_colors[spec])
+                    if spec in ['dashed', 'dashdot', 'solid', 'dotted']:
+                        newline.set_linestyle(spec)
+                    try: 
+                        float(spec)
+                    except ValueError:
+                        pass
+                    else:
+                        newline.set_alpha(float(spec))
+                self.arb_legend.append(newline)
+                    
+        self.action.set('user defined legends loaded')
        
             
     def load_colors(self):
@@ -607,77 +652,100 @@ class Plottool:
             
     def load_line_trans(self):
         self.line_trans_value = self.line_trans.get().split('+')
+        if len(self.line_trans_value) == len(self.idx_selecty):
+            for i,j in enumerate(self.idx_selecty):
+                key = self.names_y[j]
+                self.y_plot[key]['trans'] = float(self.line_trans_value[i])
+            self.action.set('line transparency loaded')
+        else:
+            self.action.set('Error! number of line transparency entered does not match number of selected y contents')
         
     
     
     def loadcolors_name(self):
         self.usercolor_value = self.usercolor_varibable.get().split('+')
-        for i,color in enumerate(self.usercolor_value):
-            if self.arb_lg_switch == 1:
-                try:
-                    self.arb_legend[i].set_color(color)
-                except:
-                    pass
-                else:
-                    self.arb_legend[i].set_color(color)
-            self.colors[i] = self.usercolor_value[i]
-        if self.arb_lg_switch == 1:
-            if len(self.usercolor_value) != len(self.arb_legend):
-                self.action.set('colors loaded. warning: number of colors entered does not match number of legends entered')
-            else:
-                self.action.set('colors loaded')
+        # for i,color in enumerate(self.usercolor_value):
+        #     if self.arb_lg_switch == 1:
+        #         try:
+        #             self.arb_legend[i].set_color(color)
+        #         except:
+        #             pass
+        #         else:
+        #             self.arb_legend[i].set_color(color)
+        if len(self.usercolor_value) != len(self.arb_legend):
+            self.action.set('Error: number of colors entered does not match number of data')
         else:
-            if len(self.usercolor_value) != len(self.idx_selecty):
-                self.action.set('colors loaded. warning: number of colors entered does not match number of data')
-            else:
-                self.action.set('colors loaded')
+            for i,color in enumerate(self.usercolor_value):
+                self.colors[i] = self.usercolor_value[i]
+            self.action.set('line colors loaded')
+        # if self.arb_lg_switch == 1:
+        #     if len(self.usercolor_value) != len(self.arb_legend):
+        #         self.action.set('colors loaded. warning: number of colors entered does not match number of legends entered')
+        #     else:
+        #         self.action.set('colors loaded')
+        # else:
+        #     if len(self.usercolor_value) != len(self.idx_selecty):
+        #         self.action.set('colors loaded. warning: number of colors entered does not match number of data')
+        #     else:
+        #         self.action.set('colors loaded')
             
     def loadcolors_ok(self):
         self.usercolor_value = self.usercolor_varibable.get().split('+')
-        for i,color in enumerate(self.usercolor_value):
-            ok_color = self.dict_ok_colors[color]
-            if self.arb_lg_switch == 1:
-                try:
-                    self.arb_legend[i].set_color(ok_color)
-                except:
-                    pass
-                else:
-                    self.arb_legend[i].set_color(ok_color)
-            self.colors[i] = ok_color
-            
-        if self.arb_lg_switch == 1:
-            if len(self.usercolor_value) != len(self.arb_legend):
-                self.action.set('colors loaded. warning: number of colors entered does not match number of legends entered')
-            else:
-                self.action.set('colors loaded')
+        if len(self.usercolor_value) != len(self.idx_selecty):
+            self.action.set('Error: number of colors entered does not match number of data')
         else:
-            if len(self.usercolor_value) != len(self.idx_selecty):
-                self.action.set('colors loaded. warning: number of colors entered does not match number of data')
-            else:
-                self.action.set('colors loaded')
+            for i,color in enumerate(self.usercolor_value):
+                ok_color = self.dict_ok_colors[color]
+                self.ok_colors[i] = ok_color
+            self.action.set('line colors loaded')
+        # for i,color in enumerate(self.usercolor_value):
+        #     ok_color = self.dict_ok_colors[color]
+        #     if self.arb_lg_switch == 1:
+        #         try:
+        #             self.arb_legend[i].set_color(ok_color)
+        #         except:
+        #             pass
+        #         else:
+        #             self.arb_legend[i].set_color(ok_color)
+        #     self.colors[i] = ok_color
+            
+        # if self.arb_lg_switch == 1:
+        #     if len(self.usercolor_value) != len(self.arb_legend):
+        #         self.action.set('colors loaded. warning: number of colors entered does not match number of legends entered')
+        #     else:
+        #         self.action.set('colors loaded')
+        # else:
+        #     if len(self.usercolor_value) != len(self.idx_selecty):
+        #         self.action.set('colors loaded. warning: number of colors entered does not match number of data')
+        #     else:
+        #         self.action.set('colors loaded')
         
     def loadcolors_tuple(self):
         self.usercolor_value = self.usercolor_varibable.get().split('+')
-        for i,color in enumerate(self.usercolor_value):
-            t_color = eval(color)
-            self.colors[i] = t_color
-            if self.arb_lg_switch == 1:
-                try:
-                    self.arb_legend[i].set_color(t_color)
-                except:
-                    pass
-                else:
-                    self.arb_legend[i].set_color(t_color)
-        if self.arb_lg_switch == 1:
-            if len(self.usercolor_value) != len(self.arb_legend):
-                self.action.set('colors loaded. warning: number of colors entered does not match number of legends entered')
-            else:
-                self.action.set('colors loaded')
+        if len(self.usercolor_value) != len(self.idx_selecty):
+            self.action.set('Error: number of colors entered does not match number of data')
         else:
-            if len(self.usercolor_value) != len(self.idx_selecty):
-                self.action.set('colors loaded. warning: number of colors entered does not match number of data')
-            else:
-                self.action.set('colors loaded')
+            for i,color in enumerate(self.usercolor_value):
+                t_color = eval(color)
+                self.colors[i] = t_color
+            self.action.set('line colors loaded')
+        #     if self.arb_lg_switch == 1:
+        #         try:
+        #             self.arb_legend[i].set_color(t_color)
+        #         except:
+        #             pass
+        #         else:
+        #             self.arb_legend[i].set_color(t_color)
+        # if self.arb_lg_switch == 1:
+        #     if len(self.usercolor_value) != len(self.arb_legend):
+        #         self.action.set('colors loaded. warning: number of colors entered does not match number of legends entered')
+        #     else:
+        #         self.action.set('colors loaded')
+        # else:
+        #     if len(self.usercolor_value) != len(self.idx_selecty):
+        #         self.action.set('colors loaded. warning: number of colors entered does not match number of data')
+        #     else:
+        #         self.action.set('colors loaded')
      
         
     def load_plot_scale(self):
@@ -693,13 +761,13 @@ class Plottool:
             
     def load_linestyles(self):
         self.linestyles_load = self.linestyles.get().split('+')
-        for i,style in enumerate(self.linestyles_load):
-            try:
-                self.arb_legend[i].set_linestyle(style)
-            except:
-                pass
-            else:
-                self.arb_legend[i].set_linestyle(style)
+        # for i,style in enumerate(self.linestyles_load):
+        #     try:
+        #         self.arb_legend[i].set_linestyle(style)
+        #     except:
+        #         pass
+        #     else:
+        #         self.arb_legend[i].set_linestyle(style)
                 
         if len(self.linestyles_load) == len(self.idx_selecty):
             for i,j in enumerate(self.idx_selecty):
@@ -727,8 +795,10 @@ class Plottool:
                 plot0 = self.ax[nrow, ncol]
         else:
             plot0 = self.ax
-        
-        self.plot_act(plot0)
+        if self.semilogy_switch.get() == 0:
+            self.plot_act(plot0)
+        else:
+            self.plot_semilogy(plot0)
             
     def plot_act(self, axes):
         plot0 = axes
@@ -743,10 +813,11 @@ class Plottool:
                     len_plot = len(self.y[key_y])
                 else:
                     len_plot = len(self.x[key_x])
-                    
+                   
                 plot0.plot(self.x[key_x][0:len_plot], self.y[key_y][0:len_plot]*scale,
+                           alpha = self.y_plot[key_y]['trans'],
                            label = self.y_plot[key_y]['label'],
-                           color = self.colors[i%9], 
+                           color = self.ok_colors[i%9], 
                            linestyle = self.y_plot[key_y]['linestyle'],
                            linewidth = self.line_weight.get())
                 # plt.tight_layout()
@@ -757,10 +828,11 @@ class Plottool:
                     key_y = self.names_y[self.idx_selecty[i]]
                     scale = self.y_plot[key_y]['scale']
                     plot0.plot(self.x[key_x], self.y[key_y]*scale,
+                               alpha = self.y_plot[key_y]['trans'],
                                label = self.y_plot[key_y]['label'], 
-                               color = self.colors[i%9],
+                               color = self.ok_colors[i%9],
                                linestyle = self.y_plot[key_y]['linestyle'],
-                               linewidth =self.line_weight.get())
+                               linewidth = self.line_weight.get())
                     # plt.tight_layout()
             else:
                 self.action.set('Error! please select same number of x and y')
@@ -776,24 +848,91 @@ class Plottool:
         plot0.tick_params(axis='both', labelsize = self.fontsize_ax.get())
         if self.vline_switch.get() == 1:
             self.draw_vline(plot0)
-            self.action.set('vlines drawn')
-        else:
-            pass
+        
+        if self.rect_switch.get() == 1:
+            self.draw_rect(plot0)
         
         if self.legendon.get() == 1:
-            if self.arb_lg_switch == 0:
+            if self.arb_lg_off.get() == 1:
                 plot0.legend(loc = self.lg_pos.get(), fontsize = self.fontsize_lg.get())
             else:
                 plot0.legend(handles = self.arb_legend, loc = self.lg_pos.get(), fontsize = self.fontsize_lg.get())
         plot0.grid(self.gridswitch.get())
-        note_p1, note_p2, note_size, notation = self.notation.get().split(',')
-        note_p1 = float(note_p1)
-        note_p2 = float(note_p2)
-        note_size = int(note_size)
-        plot0.text(note_p1, note_p2, notation, fontsize = note_size, transform=plot0.transAxes)
+        if self.notation_switch.get() == 1:
+            note_p1, note_p2, note_size, notation = self.notation.get().split(',')
+            note_p1 = float(note_p1)
+            note_p2 = float(note_p2)
+            note_size = int(note_size)
+            plot0.text(note_p1, note_p2, notation, fontsize = note_size, transform=plot0.transAxes)
         # self.canvas0.figure.savefig(path+'\\'+'Waveforms_fd.pdf')
         self.canvas0.draw()
-    
+        
+    def plot_semilogy(self, axes):
+        plot0 = axes
+        plot0.cla()
+        # if self.usercolor_switch.get() == 1:
+        if len(self.idx_selectx) == 1:
+            key_x = self.names_x[self.idx_selectx[0]]
+            for i in self.idx_selecty:
+                key_y = self.names_y[i]
+                scale = self.y_plot[key_y]['scale']
+                if len(self.x[key_x]) >= len(self.y[key_y]):
+                    len_plot = len(self.y[key_y])
+                else:
+                    len_plot = len(self.x[key_x])
+                   
+                plot0.semilogy(self.x[key_x][0:len_plot], self.y[key_y][0:len_plot]*scale,
+                           alpha = self.y_plot[key_y]['trans'],
+                           label = self.y_plot[key_y]['label'],
+                           color = self.ok_colors[i%9], 
+                           linestyle = self.y_plot[key_y]['linestyle'],
+                           linewidth = self.line_weight.get())
+                # plt.tight_layout()
+        else:
+            if len(self.idx_selectx) == len(self.idx_selecty):
+                for i in range(0, len(self.idx_selectx)):
+                    key_x = self.names_x[self.idx_selectx[i]]
+                    key_y = self.names_y[self.idx_selecty[i]]
+                    scale = self.y_plot[key_y]['scale']
+                    plot0.semilogy(self.x[key_x], self.y[key_y]*scale,
+                               alpha = self.y_plot[key_y]['trans'],
+                               label = self.y_plot[key_y]['label'], 
+                               color = self.ok_colors[i%9],
+                               linestyle = self.y_plot[key_y]['linestyle'],
+                               linewidth = self.line_weight.get())
+                    # plt.tight_layout()
+            else:
+                self.action.set('Error! please select same number of x and y')
+           
+       
+        if self.autoxlim.get() == 0:
+            plot0.set_xlim(left=float(self.xlim_l.get()),right=float(self.xlim_h.get()))
+        if self.autoylim.get() == 0:
+            plot0.set_ylim(bottom=float(self.ylim_l.get()),top=float(self.ylim_h.get()))
+        plot0.set_xlabel(self.labelx.get(),fontsize = self.fontsize_ax.get())
+        plot0.set_ylabel(self.labely.get(),fontsize = self.fontsize_ax.get())
+        # plot0.ticklabel_format(axis = 'y', style = 'sci', scilimits = (-1,1))
+        plot0.tick_params(axis='both', labelsize = self.fontsize_ax.get())
+        if self.vline_switch.get() == 1:
+            self.draw_vline(plot0)
+        
+        if self.rect_switch.get() == 1:
+            self.draw_rect(plot0)
+        
+        if self.legendon.get() == 1:
+            if self.arb_lg_off.get() == 1:
+                plot0.legend(loc = self.lg_pos.get(), fontsize = self.fontsize_lg.get())
+            else:
+                plot0.legend(handles = self.arb_legend, loc = self.lg_pos.get(), fontsize = self.fontsize_lg.get())
+        plot0.grid(self.gridswitch.get())
+        if self.notation_switch.get() == 1:
+            note_p1, note_p2, note_size, notation = self.notation.get().split(',')
+            note_p1 = float(note_p1)
+            note_p2 = float(note_p2)
+            note_size = int(note_size)
+            plot0.text(note_p1, note_p2, notation, fontsize = note_size, transform=plot0.transAxes)
+        # self.canvas0.figure.savefig(path+'\\'+'Waveforms_fd.pdf')
+        self.canvas0.draw()
         
     def save_fig_info(self):
         path = tk.filedialog.askdirectory()
@@ -846,7 +985,10 @@ class Plottool:
         canvas0.get_tk_widget().pack(fill=tk.BOTH,expand=True)
         plot0 = ax
         toolbar = NavigationToolbar2Tk(canvas0,frame)
-        self.plot_act(plot0)
+        if self.semilogy_switch.get() == 0:
+            self.plot_act(plot0)
+        else:
+            self.plot_semilogy(plot0)
         
     
     def export_data(self):
@@ -952,12 +1094,15 @@ class Plottool:
             for pos in x_pos:
                 pos = float(pos)
                 axes.axvline(x = pos, linestyle = self.vline_style.get(), 
-                             color = self.dict_ok_colors[self.vline_color.get()])    
+                             color = self.dict_ok_colors[self.vline_color.get()],
+                             lw = self.line_weight.get())    
         else:
             for pos in x_pos:
                 pos = float(pos)
                 axes.axvline(x = pos, ymin = self.vline_l.get(), ymax = self.vline_h.get(),
-                            linestyle = self.vline_style.get(), color = self.dict_ok_colors[self.vline_color.get()])
+                            linestyle = self.vline_style.get(), 
+                            color = self.dict_ok_colors[self.vline_color.get()],
+                            lw = self.line_weight.get())
         if self.vline_lg_switch.get() == 1:
             self.arb_legend.append(Line2D([], [], 
                                           linewidth = self.line_weight.get(), 
@@ -967,42 +1112,70 @@ class Plottool:
                                    )
             self.vline_lg_switch.set(0)
                                    
-    def rectan_params(self):
-        self.rectan_switch = tk.IntVar(value = 1)
-        self.rectan_xpos = tk.StringVar()
-        self.vline_h = tk.DoubleVar(value = 0)
-        self.vline_l = tk.DoubleVar(value = 0)
-        self.vline_style = tk.StringVar(value = '--')
-        self.vline_color = tk.StringVar(value = 'red')
+    def rect_params(self):
+        self.rect_switch = tk.IntVar(value = 1)
+        self.rect_xmin = tk.DoubleVar(value = 0)
+        self.rect_xmax = tk.DoubleVar(value = 0)
+        self.rect_ymin = tk.DoubleVar(value = 0)
+        self.rect_ymax = tk.DoubleVar(value = 0)
+        self.rect_style = tk.StringVar(value = '--')
+        self.rect_color = tk.StringVar(value = 'red')
         newwindow = tk.Toplevel()
         
         
-        label_xpos  = ttk.Label(master = newwindow, text = 'x position: ')
-        label_vline_l = ttk.Label(master = newwindow, text = 'line start: ')
-        label_vline_h = ttk.Label(master = newwindow, text = 'line end: ')
+        label_xmin = ttk.Label(master = newwindow, text = 'xmin: ')
+        label_xmax = ttk.Label(master = newwindow, text = 'xmax: ')
+        label_ymin = ttk.Label(master = newwindow, text = 'ymin: ')
+        label_ymax = ttk.Label(master = newwindow, text = 'ymax: ')
         label_color = ttk.Label(master = newwindow, text = 'color: ')
         label_style = ttk.Label(master = newwindow, text = 'line style: ')
-        entry_xpos = ttk.Entry(master = newwindow, textvariable = self.vline_xpos)
-        entry_vline_l = ttk.Entry(master = newwindow, textvariable = self.vline_l)
-        entry_vline_h = ttk.Entry(master = newwindow, textvariable = self.vline_h)
-        entry_color = ttk.Entry(master = newwindow, textvariable = self.vline_color)
-        entry_style = ttk.Entry(master = newwindow, textvariable = self.vline_style)
-        checkbutton_switch  = ttk.Checkbutton(master = newwindow, variable = self.vline_switch, 
-                                              text = 'vline on/off: ')
+        entry_xmin = ttk.Entry(master = newwindow, textvariable = self.rect_xmin)
+        entry_xmax = ttk.Entry(master = newwindow, textvariable = self.rect_xmax)
+        entry_ymin = ttk.Entry(master = newwindow, textvariable = self.rect_ymin)
+        entry_ymax = ttk.Entry(master = newwindow, textvariable = self.rect_ymax)
+        entry_color = ttk.Entry(newwindow, textvariable = self.rect_color)
+        entry_style = ttk.Entry(master = newwindow, textvariable = self.rect_style)
+        checkbutton_switch  = ttk.Checkbutton(master = newwindow, variable = self.rect_switch, 
+                                              text = 'rect on/off: ')
         button_confirm = ttk.Button(master = newwindow, command = newwindow.destroy, text = 'confirm')
         
-        label_xpos.grid(column = 0, row = 0, sticky = 'w')
-        entry_xpos.grid(column = 1, row = 0, sticky = 'w')
-        label_vline_l.grid(column = 0, row = 1, sticky = 'w')
-        entry_vline_l.grid(column = 1, row = 1, sticky = 'w')
-        label_vline_h.grid(column = 0, row = 2, sticky = 'w')
-        entry_vline_h.grid(column = 1, row = 2, sticky = 'w')
-        label_color.grid(column = 0, row = 3, sticky = 'w')
-        entry_color.grid(column = 1, row = 3, sticky = 'w')
-        label_style.grid(column = 0, row = 4, sticky = 'w')
-        entry_style.grid(column = 0, row = 4, sticky = 'w')
-        checkbutton_switch.grid(column = 0, row = 5, sticky = 'w')
-        button_confirm.grid(column  = 1, row = 5, sticky = 'w')
+        label_xmin.grid(column = 0, row = 0, sticky = 'w')
+        entry_xmin.grid(column = 1, row = 0, sticky = 'w')
+        label_xmax.grid(column = 0, row = 1, sticky = 'w')
+        entry_xmax.grid(column = 1, row = 1, sticky = 'w')
+        label_ymin.grid(column = 0, row = 2, sticky = 'w')
+        entry_ymin.grid(column = 1, row = 2, sticky = 'w')
+        label_ymax.grid(column = 0, row = 3, sticky = 'w')
+        entry_ymax.grid(column = 1, row = 3, sticky = 'w')
+        label_color.grid(column = 0, row = 4, sticky = 'w')
+        entry_color.grid(column = 1, row = 4, sticky = 'w')
+        label_style.grid(column = 0, row = 5, sticky = 'w')
+        entry_style.grid(column = 0, row = 5, sticky = 'w')
+        checkbutton_switch.grid(column = 0, row = 6, sticky = 'w')
+        button_confirm.grid(column  = 1, row = 6, sticky = 'w')
+        
+    def draw_rect(self, axes):
+        # anchor = self.rect_anchor.get().split(',')
+        ymax,ymin = axes.get_ylim()
+        # x0 = float(anchor[0])
+        # x1 = x0+self.rect_w.get()
+        y0 = 1-(self.rect_ymin.get()-ymin)/(ymax-ymin)
+        y1 = 1-(self.rect_ymax.get()-ymin)/(ymax-ymin)
+        # w = self.rect_w.get()
+        # h = self.rect_h.get()
+        color0 = self.dict_ok_colors[self.rect_color.get()]
+        axes.axvspan(self.rect_xmin.get(), self.rect_xmax.get(), ymin = y0, ymax = y1, 
+                     fill = False,
+                     color = color0, 
+                     ls = self.rect_style.get(),
+                     lw = self.line_weight.get()
+                     )
+   
+        
+        
+    
+        
+    
         
 if __name__ == '__main__':
     x = np.linspace(1, 10,10)
