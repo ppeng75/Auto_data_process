@@ -1,6 +1,6 @@
-# Lab-dataprocess for typical terahertz time-domain spectroscopy lab
+# Data processing for typical terahertz time-domain spectroscopy (THz-TDS) lab
 # gui_v5 starts the data process UI, the other py files are modules to realize data process functions
-# This set of codes runs under python environment and does basic data process such as FFT and index calculation for a Terahertz time domain spectroscopy system. Input data should be .dat/.txt format. 
+# This set of codes runs under python environment and does basic data processing jobs, such as FFT and index calculation. Input data should be .dat/.txt format. 
 # Update from time to time
 Attention: 
 1. Raw data needs to be well organized and stored in a good matrix format, where the first column is x-variable inputs and following columns are different y variables.
