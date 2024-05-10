@@ -15,19 +15,19 @@ Created on Wed Apr 26 11:03:52 2023
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.lines import Line2D
-from matplotlib.patches import Rectangle
+# from matplotlib.patches import Rectangle
 import copy
 import matplotlib as mpl
-from matplotlib.figure import Figure
+# from matplotlib.figure import Figure
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg,NavigationToolbar2Tk
 import tkinter as tk
 from tkinter import ttk
-import scipy as sp
+# import scipy as sp
 import pandas as pd
 import dataprocessor as dp
+import Fast_data_process as fdp
 from dataprocessor import Basic_functions as bf
-from scipy.optimize import curve_fit
-import scipy.signal as ss
+import os
 import curfittool as cft
 import configparser as cfp
 
@@ -46,6 +46,12 @@ class Plottool:
             DESCRIPTION: x values to be plotted
         yvalues : dict or list of 1d array or ndarray
             DESCRIPTION: y values to be plotted
+        nrow: int
+            DESCRIPTION: number of rows for subplots
+        ncol: int
+            DESCRIPTION: number of columns for subplots
+        xlabel: None or str
+            DESCRIPTION: x axis label to be used when tool is called
 
         Returns
         -------
@@ -60,6 +66,14 @@ class Plottool:
         self.x_plot = {}
         self.y_plot = {}
         self.frame = frame
+        self.input_xlabel = xlabel
+        self.input_ylabel = ylabel
+        self.input_xlimits = xlimits
+        self.input_ylimits = ylimits
+        
+        
+        '''build default x and y dictionaries that contains initial plot settings'''
+        
         n_color = 0
         for key in list(self.y):
             # self.x_plot[key] = {'data': self.x[key],
@@ -74,8 +88,14 @@ class Plottool:
                                 'trans': 1}
             n_color = n_color+1
         self.action = tk.StringVar(value = 'ready')
-
-                    
+        
+        self.current_path = os.getcwd().replace('\\','/')
+        self.config_fname = tk.StringVar(value = '')
+        self.config_files = fdp.get_config_fnames(self.current_path)
+        self.config_select = tk.StringVar()
+        
+        '''load other initial plot settings if initial configuration file is available'''
+        
         try:
             open('plottool_v7.ini','r')
         except:
@@ -127,7 +147,7 @@ class Plottool:
             self.line_trans_switch = tk.IntVar(value = pt_config['init']['line_trans_switch'])
             
              
-            
+        '''other global variables'''    
         
         self.nrow = nrow
         self.ncol = ncol
@@ -171,6 +191,7 @@ class Plottool:
         prop_cycle = plt.rcParams['axes.prop_cycle']
         self.colors = prop_cycle.by_key()['color']
         
+        '''color blind friendly colors'''
         
         
         self.dict_ok_colors = { 'blue': "#56B4E9",
@@ -183,6 +204,7 @@ class Plottool:
                                 'black': "#000000",
                                 'yellow': "#F0E442",
                                 'grey': "#999999"}
+        
         self.ok_colors = ["#56B4E9", "#E69F00", "#009E73", "#F5C710", "#000000","#D55E00", "#CC79A7",
                            "#0072B2", "#D55E00", "#F0E442", "#999999"]
         
@@ -423,7 +445,14 @@ class Plottool:
         button_user_linestyle = ttk.Button(self.window4, text = 'load', command = self.load_linestyles, width = 10)
         
         
-        button_config = ttk.Button(self.window4, text = 'save as default', command = self.build_config)
+        button_config = ttk.Button(self.window4, text = 'save this config', command = self.build_config)
+        button_load_config = ttk.Button(self.window4, text = 'load config', command = self.load_config)
+        combobox_config = ttk.Combobox(self.window4, textvariable=self.config_select)
+        combobox_config['value'] = self.config_files
+        entry_config_fname = ttk.Entry(self.window4, textvariable = self.config_fname, width = 30)
+        
+        # entry_config = ttk.Entry(self.window4, textvariable=self.config_save_fname)
+        # button_config_save = ttk.Button(self.window4, text = 'save config', command=self.save_fig_info)
         
         
         # grid widges
@@ -443,7 +472,11 @@ class Plottool:
         entry_linestyles.grid(column = 0, row = 7, columnspan = 4, sticky = 'w')
         button_user_linestyle.grid(column = 4, row = 7, columnspan = 1, sticky = 'w')
         
-        button_config.grid(column = 0, row = 8, columnspan = 1, sticky = 'w')
+        entry_config_fname.grid(column = 0, row = 8, columnspan = 2, sticky = 'w')
+        button_config.grid(column = 2, row = 8, columnspan = 1, sticky = 'w')
+        combobox_config.grid(column = 3, row=8, sticky='w')
+        button_load_config.grid(column = 4, row = 8, sticky = 'w')
+        
         
         
         '''
@@ -477,10 +510,36 @@ class Plottool:
                              'config_largeplot': self.config_largeplot.get(),
                              'line_trans': self.line_trans.get(),
                              'line_trans_switch': self.line_trans_switch.get()}
-        with open('plottool_v7.ini','w') as plottool_v7_init:
-            pt_config.write(plottool_v7_init)
-        self.action.set('current entry values are saved as default values')
+        if self.config_fname.get() == '':
+            with open('plottool_v7.ini','w') as plottool_v7_init:
+                pt_config.write(plottool_v7_init)
+            self.action.set('new default configuration set')
+        else:
+            with open(self.config_fname.get(), 'w') as init_config:
+                pt_config.write(init_config)
+            self.action.set('new configuration saved')
     
+    
+    def load_config(self):
+        pt_config = cfp.ConfigParser()
+        pt_config.read(self.config_select.get()+'.ini')
+        self.fontsize_ax.set(float(pt_config['init']['fontsize_ax']))
+        self.fontsize_lg.set(float(pt_config['init']['fontsize_lg']))
+        self.fontsize_tick.set(float(pt_config['init']['fontsize_tick']))
+        self.labelx.set(pt_config['init']['label_x'])
+        self.labely.set(pt_config['init']['label_y'])
+        self.xlim_l.set(float(pt_config['init']['xlim_l']))
+        self.xlim_h.set(float(pt_config['init']['xlim_h']))
+        self.ylim_l.set(float(pt_config['init']['ylim_l']))
+        self.ylim_h.set(float(pt_config['init']['ylim_h']))
+        self.legendnames.set(pt_config['init']['legendnames'])
+        self.linestyles.set(pt_config['init']['linestyles'])
+        self.usercolor_varibable.set(pt_config['init']['colors'])
+        self.notation.set(pt_config['init']['fig_notation'])
+        self.config_largeplot.set(pt_config['init']['config_largeplot'])
+        self.line_trans.set(pt_config['init']['line_trans'])
+        self.line_trans_switch.set(pt_config['init']['line_trans_switch'])
+        self.action.set('New plot configuration Loaded')
 
     
     def loadselection_x(self):
